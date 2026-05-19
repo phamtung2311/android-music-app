@@ -2,7 +2,9 @@ package com.example.zingmp3.network.model
 
 import com.example.zingmp3.network.RetrofitClient
 import com.google.gson.annotations.SerializedName
+import androidx.compose.runtime.Immutable
 
+@Immutable
 data class Song(
     @SerializedName("id") val id: Int,
     @SerializedName("title") val title: String,
@@ -13,7 +15,8 @@ data class Song(
     @SerializedName("genre") val genre: String? = null,
     @SerializedName("duration") val duration: Int? = null,
     @SerializedName("views") val views: Int = 0,
-    @SerializedName("likes_count") val likes_count: Int = 0
+    @SerializedName("likes_count") val likes_count: Int = 0,
+    @SerializedName("is_public") val isPublic: Boolean = true
 ) {
     fun getFullAudioUrl(): String {
         return if (audio_url.startsWith("http")) audio_url else RetrofitClient.BASE_URL + audio_url
@@ -25,6 +28,7 @@ data class Song(
     }
 }
 
+@Immutable
 data class Artist(
     val id: Int,
     val stage_name: String,
@@ -38,6 +42,7 @@ data class Artist(
     }
 }
 
+@Immutable
 data class Playlist(
     val id: Int,
     val name: String,

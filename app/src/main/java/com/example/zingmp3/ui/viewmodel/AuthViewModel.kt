@@ -3,16 +3,11 @@ package com.example.zingmp3.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.zingmp3.data.repository.AuthRepository
-import com.example.zingmp3.network.model.LoginRequest
-import com.example.zingmp3.network.model.LoginResponse
-import com.example.zingmp3.network.model.RegisterRequest
-import com.example.zingmp3.network.model.RegisterResponse
+import com.example.zingmp3.network.model.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-
 import org.json.JSONObject
-import retrofit2.Response
 
 sealed class AuthState<out T> {
     object Idle : AuthState<Nothing>()
@@ -29,6 +24,9 @@ class AuthViewModel : ViewModel() {
 
     private val _registerState = MutableStateFlow<AuthState<RegisterResponse>>(AuthState.Idle)
     val registerState = _registerState.asStateFlow()
+
+    private val _updateProfileState = MutableStateFlow<AuthState<RegisterResponse>>(AuthState.Idle)
+    val updateProfileState = _updateProfileState.asStateFlow()
 
     fun login(request: LoginRequest) {
         viewModelScope.launch {
@@ -74,8 +72,31 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    fun updateProfile(id: Int, request: UpdateProfileRequest) {
+        viewModelScope.launch {
+            _updateProfileState.value = AuthState.Loading
+            try {
+                val response = repository.updateProfile(id, request)
+                if (response.isSuccessful) {
+                    _updateProfileState.value = AuthState.Success(response.body()!!)
+                } else {
+                    val errorMsg = try {
+                        val errorObj = JSONObject(response.errorBody()?.string() ?: "{}")
+                        errorObj.getString("message")
+                    } catch (e: Exception) {
+                        "Cập nhật thất bại"
+                    }
+                    _updateProfileState.value = AuthState.Error(errorMsg)
+                }
+            } catch (e: Exception) {
+                _updateProfileState.value = AuthState.Error("Lỗi kết nối: ${e.message}")
+            }
+        }
+    }
+
     fun resetState() {
         _loginState.value = AuthState.Idle
         _registerState.value = AuthState.Idle
+        _updateProfileState.value = AuthState.Idle
     }
 }

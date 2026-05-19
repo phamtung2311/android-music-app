@@ -9,4 +9,5 @@ class AuthRepository {
 
     suspend fun login(request: LoginRequest) = api.login(request)
     suspend fun register(request: RegisterRequest) = api.register(request)
+    suspend fun updateProfile(id: Int, request: com.example.zingmp3.network.model.UpdateProfileRequest) = api.updateProfile(id, request)
 }

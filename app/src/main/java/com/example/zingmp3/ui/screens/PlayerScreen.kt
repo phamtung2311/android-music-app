@@ -1,5 +1,6 @@
 package com.example.zingmp3.ui.screens
 
+import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -7,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.Forward10
+import androidx.compose.material.icons.rounded.Replay10
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +19,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,7 +33,6 @@ fun PlayerScreen(navController: NavController, musicViewModel: MusicViewModel) {
     val currentSong by musicViewModel.currentSong.collectAsState()
     val isPlaying by musicViewModel.isPlaying.collectAsState()
 
-    // Tối ưu hóa Gradient: Chỉ tạo 1 lần duy nhất
     val backgroundBrush = remember {
         Brush.verticalGradient(listOf(Color(0xFF333333), Color.Black))
     }
@@ -42,30 +45,41 @@ fun PlayerScreen(navController: NavController, musicViewModel: MusicViewModel) {
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header
-            PlayerHeader(onBack = { navController.popBackStack() })
+            PlayerHeader(
+                onBack = { navController.popBackStack() },
+                onAddFavorite = { musicViewModel.favoriteSong(song.id) }
+            )
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(0.5f))
 
-            // Đĩa CD Quay - Sử dụng kỹ thuật vẽ trực tiếp lên GPU
+            // Đĩa quay cô lập, không bị ảnh hưởng bởi các thành phần khác
             RotatingCD(imageUrl = song.getFullImageUrl(), isPlaying = isPlaying)
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(0.5f))
 
-            // Thông tin bài hát
+            // Thông tin lượt xem cô lập
+            SongStatsRow(song.views, song.likes_count)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             SongInfo(title = song.title, artist = song.artist_name ?: "Unknown Artist")
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Thanh tiến trình - Tách biệt hoàn toàn để không gây lag cho đĩa quay
+            // Nút Tim cô lập hoàn toàn
+            LikeSection(musicViewModel, song.id)
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             PlaybackProgress(musicViewModel)
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Nút điều khiển
             PlayerControls(
                 isPlaying = isPlaying,
-                onTogglePlay = { musicViewModel.togglePlayPause() }
+                onTogglePlay = { musicViewModel.togglePlayPause() },
+                onSeekForward = { musicViewModel.seekTo(musicViewModel.currentPosition.value + 10000) },
+                onSeekBackward = { musicViewModel.seekTo(musicViewModel.currentPosition.value - 10000) }
             )
             
             Spacer(modifier = Modifier.height(24.dp))
@@ -74,8 +88,45 @@ fun PlayerScreen(navController: NavController, musicViewModel: MusicViewModel) {
 }
 
 @Composable
+fun SongStatsRow(views: Int, likes: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.Headset, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+        Text(text = " $views  •  ", color = Color.Gray, fontSize = 14.sp)
+        Icon(Icons.Default.Favorite, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+        Text(text = " $likes", color = Color.Gray, fontSize = 14.sp)
+    }
+}
+
+@Composable
+fun LikeSection(viewModel: MusicViewModel, songId: Int) {
+    val isLiked by viewModel.isCurrentLiked.collectAsState()
+    val context = LocalContext.current
+    
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+        IconButton(
+            onClick = { 
+                viewModel.likeSong(songId) { message ->
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+            },
+            modifier = Modifier.size(64.dp)
+        ) {
+            Icon(
+                imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = null,
+                tint = if (isLiked) Color.Red else Color.White,
+                modifier = Modifier.size(42.dp)
+            )
+        }
+    }
+}
+
+@Composable
 fun RotatingCD(imageUrl: String?, isPlaying: Boolean) {
-    // Sử dụng InfiniteTransition với cấu hình tối ưu
     val infiniteTransition = rememberInfiniteTransition(label = "CDRotation")
     val rotation = infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -87,34 +138,19 @@ fun RotatingCD(imageUrl: String?, isPlaying: Boolean) {
         label = "RotationAngle"
     )
 
-    // Sử dụng Painter để kiểm soát việc vẽ tốt hơn AsyncImage trực tiếp
     val painter = rememberAsyncImagePainter(model = imageUrl)
 
     Box(
         modifier = Modifier
             .size(280.dp)
             .graphicsLayer {
-                // KỸ THUẬT QUAN TRỌNG: Chỉ đọc giá trị .value bên trong lambda này.
-                // Điều này giúp việc xoay diễn ra ở "Draw Phase", không gây Recomposition.
                 rotationZ = if (isPlaying) rotation.value else 0f
             }
             .clip(CircleShape)
             .background(Color.Black)
     ) {
-        Image(
-            painter = painter,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-        // Tạo hiệu ứng lỗ tròn nhỏ ở giữa đĩa CD cho chuyên nghiệp
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .align(Alignment.Center)
-                .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.5f))
-        )
+        Image(painter = painter, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        Box(modifier = Modifier.size(40.dp).align(Alignment.Center).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)))
     }
 }
 
@@ -123,60 +159,60 @@ fun RotatingCD(imageUrl: String?, isPlaying: Boolean) {
 fun PlaybackProgress(musicViewModel: MusicViewModel) {
     val position by musicViewModel.currentPosition.collectAsState()
     val duration by musicViewModel.duration.collectAsState()
+    var sliderPosition by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+
+    LaunchedEffect(position, duration) {
+        if (!isDragging && duration > 0) {
+            sliderPosition = position.toFloat() / duration.toFloat()
+        }
+    }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
         Slider(
-            value = if (duration > 0) position.toFloat() / duration.toFloat() else 0f,
-            onValueChange = { musicViewModel.seekTo((it * duration).toLong()) },
-            colors = SliderDefaults.colors(
-                activeTrackColor = Color.White,
-                inactiveTrackColor = Color.White.copy(alpha = 0.2f),
-            ),
+            value = sliderPosition,
+            onValueChange = { isDragging = true; sliderPosition = it },
+            onValueChangeFinished = {
+                isDragging = false
+                musicViewModel.seekTo((sliderPosition * duration).toLong())
+            },
+            colors = SliderDefaults.colors(thumbColor = Color(0xFF1DB954), activeTrackColor = Color(0xFF1DB954), inactiveTrackColor = Color.White.copy(alpha = 0.2f)),
             thumb = {
-                // Tự định nghĩa chấm tròn trắng nhỏ gọn
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(Color.White, CircleShape)
-                )
+                Box(modifier = Modifier.size(16.dp).background(Color(0xFF1DB954), CircleShape).graphicsLayer {
+                    scaleX = if (isDragging) 1.5f else 1f
+                    scaleY = if (isDragging) 1.5f else 1f
+                })
             },
             modifier = Modifier.fillMaxWidth()
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = formatTime(position),
-                color = Color.LightGray,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = formatTime(duration),
-                color = Color.LightGray,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(text = formatTime(if (isDragging) (sliderPosition * duration).toLong() else position), color = Color.LightGray, fontSize = 12.sp)
+            Text(text = formatTime(duration), color = Color.LightGray, fontSize = 12.sp)
         }
     }
 }
 
 @Composable
-fun PlayerHeader(onBack: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.Default.KeyboardArrowDown, null, tint = Color.White, modifier = Modifier.size(32.dp))
-        }
+fun PlayerHeader(onBack: () -> Unit, onAddFavorite: () -> Unit) {
+    var showMenu by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onBack) { Icon(Icons.Default.KeyboardArrowDown, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
         Text("ĐANG PHÁT", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        IconButton(onClick = { }) {
-            Icon(Icons.Default.MoreVert, null, tint = Color.White)
+        Box {
+            IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, null, tint = Color.White) }
+            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }, modifier = Modifier.background(Color.DarkGray)) {
+                DropdownMenuItem(
+                    text = { Text("Thêm vào yêu thích", color = Color.White) },
+                    onClick = {
+                        onAddFavorite()
+                        showMenu = false
+                        Toast.makeText(context, "Đã thêm vào yêu thích", Toast.LENGTH_SHORT).show()
+                    },
+                    leadingIcon = { Icon(Icons.Default.Favorite, null, tint = Color.Red) }
+                )
+            }
         }
     }
 }
@@ -184,55 +220,27 @@ fun PlayerHeader(onBack: () -> Unit) {
 @Composable
 fun SongInfo(title: String, artist: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = title, 
-            color = Color.White, 
-            fontSize = 22.sp, 
-            fontWeight = FontWeight.Bold,
-            maxLines = 1
-        )
-        Text(
-            text = artist, 
-            color = Color(0xFF1DB954), // Đổi màu nghệ sĩ sang xanh cho nổi bật
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium
-        )
+        Text(text = title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(text = artist, color = Color(0xFF1DB954), fontSize = 16.sp, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
-fun PlayerControls(isPlaying: Boolean, onTogglePlay: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = { }) { Icon(Icons.Default.Shuffle, null, tint = Color.Gray, modifier = Modifier.size(24.dp)) }
+fun PlayerControls(isPlaying: Boolean, onTogglePlay: () -> Unit, onSeekForward: () -> Unit, onSeekBackward: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onSeekBackward) { Icon(Icons.Rounded.Replay10, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
         IconButton(onClick = { }) { Icon(Icons.Default.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(40.dp)) }
-        
-        Surface(
-            onClick = onTogglePlay,
-            shape = CircleShape,
-            color = Color.White,
-            modifier = Modifier.size(64.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    tint = Color.Black,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
+        Surface(onClick = onTogglePlay, shape = CircleShape, color = Color.White, modifier = Modifier.size(64.dp)) {
+            Box(contentAlignment = Alignment.Center) { Icon(imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black, modifier = Modifier.size(36.dp)) }
         }
-        
         IconButton(onClick = { }) { Icon(Icons.Default.SkipNext, null, tint = Color.White, modifier = Modifier.size(40.dp)) }
-        IconButton(onClick = { }) { Icon(Icons.Default.Repeat, null, tint = Color.Gray, modifier = Modifier.size(24.dp)) }
+        IconButton(onClick = onSeekForward) { Icon(Icons.Rounded.Forward10, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
     }
 }
 
 private fun formatTime(milliseconds: Long): String {
-    val minutes = TimeUnit.MILLISECONDS.toMinutes(milliseconds)
-    val seconds = TimeUnit.MILLISECONDS.toSeconds(milliseconds) % 60
+    val totalSeconds = milliseconds / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
     return String.format("%02d:%02d", minutes, seconds)
 }

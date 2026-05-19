@@ -5,22 +5,35 @@ import androidx.annotation.OptIn
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.zingmp3.network.RetrofitClient
 import com.example.zingmp3.network.model.Song
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
     val songs: StateFlow<List<Song>> = _songs
+
+    private val _topWeeklySongs = MutableStateFlow<List<Song>>(emptyList())
+    val topWeeklySongs: StateFlow<List<Song>> = _topWeeklySongs
+
+    val top10WeeklySongs: StateFlow<List<Song>> = _topWeeklySongs
+        .map { it.take(10) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _username = MutableStateFlow("User")
+    val username: StateFlow<String> = _username
 
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong
@@ -37,24 +50,35 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isBuffering = MutableStateFlow(false)
     val isBuffering: StateFlow<Boolean> = _isBuffering
 
+    private val _isCurrentLiked = MutableStateFlow(false)
+    val isCurrentLiked: StateFlow<Boolean> = _isCurrentLiked
+
     private var exoPlayer: ExoPlayer? = null
+    private val sharedPref = application.getSharedPreferences("USER_DATA", android.content.Context.MODE_PRIVATE)
+    private var statsJob: Job? = null
 
     init {
         setupPlayer()
-        fetchSongs()
+        refreshData()
         updateProgress()
+        loadUsername()
     }
+
+    private fun loadUsername() {
+        _username.value = sharedPref.getString("username", "User") ?: "User"
+    }
+
+    fun refreshData() {
+        fetchSongs()
+        fetchTopWeekly()
+    }
+
+    private fun getUserId(): Int = sharedPref.getInt("userId", -1)
 
     @OptIn(UnstableApi::class)
     private fun setupPlayer() {
-        // Cấu hình LoadControl cực mạnh để tải nhạc nhanh hơn
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                50000, // Tải trước 50 giây
-                100000, // Tối đa 100 giây
-                1500,  // Cần 1.5 giây để bắt đầu
-                3000   // Cần 3 giây để phát lại sau khi lag
-            )
+            .setBufferDurationsMs(50000, 100000, 1500, 3000)
             .build()
 
         exoPlayer = ExoPlayer.Builder(getApplication())
@@ -66,13 +90,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         if (state == Player.STATE_READY) {
                             _duration.value = duration
                         }
-                        android.util.Log.d("MusicPlayer", "State changed to: $state")
                     }
                     override fun onIsPlayingChanged(isPlayingNow: Boolean) {
                         _isPlaying.value = isPlayingNow
-                    }
-                    override fun onPlayerError(error: PlaybackException) {
-                        android.util.Log.e("MusicPlayer", "Error: ${error.message}")
                     }
                 })
             }
@@ -100,16 +120,46 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val response = RetrofitClient.api.getSongs()
                 if (response.isSuccessful) {
-                    _songs.value = response.body() ?: emptyList()
+                    val songList = response.body() ?: emptyList()
+                    _songs.value = songList
+                    _currentSong.value?.let { current ->
+                        songList.find { it.id == current.id }?.let { updated ->
+                            _currentSong.value = updated
+                        }
+                    }
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("MusicViewModel", "Exception fetching songs", e)
-            }
+            } catch (e: Exception) { /* ignore */ }
+        }
+    }
+
+    fun fetchTopWeekly() {
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.api.getTopWeeklySongs()
+                if (response.isSuccessful) {
+                    _topWeeklySongs.value = response.body() ?: emptyList()
+                }
+            } catch (e: Exception) { /* ignore */ }
         }
     }
 
     fun playSong(song: Song) {
         _currentSong.value = song
+        _isCurrentLiked.value = false
+        
+        // Hủy job cũ nếu có
+        statsJob?.cancel()
+        
+        // Trì hoãn các API mạng để ưu tiên băng thông cho việc tải nhạc mượt mà
+        statsJob = viewModelScope.launch {
+            delay(1500) // Đợi 1.5 giây để nhạc load mượt rồi mới check status
+            val userId = getUserId()
+            if (userId != -1) {
+                checkLikeStatus(song.id, userId)
+            }
+            recordView(song.id)
+        }
+
         exoPlayer?.let { player ->
             player.stop()
             player.clearMediaItems()
@@ -120,13 +170,70 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun checkLikeStatus(songId: Int, userId: Int) {
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.api.checkFavoriteStatus(songId, userId)
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    val isFav = body?.get("isFavorite") as? Boolean 
+                                ?: body?.get("isLiked") as? Boolean 
+                                ?: false
+                    _isCurrentLiked.value = isFav
+                }
+            } catch (e: Exception) { /* ignore */ }
+        }
+    }
+
+    private fun recordView(songId: Int) {
+        val userId = getUserId()
+        viewModelScope.launch {
+            try {
+                RetrofitClient.api.recordView(songId, if (userId != -1) userId else null)
+            } catch (e: Exception) { /* ignore */ }
+        }
+    }
+
+    fun likeSong(songId: Int, onError: (String) -> Unit) {
+        val userId = getUserId()
+        if (userId == -1) {
+            onError("Vui lòng đăng nhập")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.api.likeSong(songId, userId)
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    val isLikedNow = body?.get("isLiked") as? Boolean 
+                                    ?: body?.get("liked") as? Boolean 
+                                    ?: !_isCurrentLiked.value
+                    
+                    _isCurrentLiked.value = isLikedNow
+                    fetchSongs() // Cập nhật lại số lượng Like hiển thị
+                } else {
+                    onError("Lỗi máy chủ (${response.code()})")
+                }
+            } catch (e: Exception) {
+                onError("Lỗi kết nối mạng")
+            }
+        }
+    }
+
+    fun favoriteSong(songId: Int) {
+        val userId = getUserId()
+        if (userId == -1) return
+        viewModelScope.launch {
+            try {
+                RetrofitClient.api.favoriteSong(songId, userId)
+            } catch (e: Exception) { /* ignore */ }
+        }
+    }
+
     fun togglePlayPause() {
         exoPlayer?.let { player ->
-            if (player.isPlaying) {
-                player.pause()
-            } else {
-                player.play()
-            }
+            if (player.isPlaying) player.pause() else player.play()
         }
     }
 

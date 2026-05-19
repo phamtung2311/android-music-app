@@ -8,11 +8,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.zingmp3.ui.screens.AdminScreen
-import com.example.zingmp3.ui.screens.HomeScreen
-import com.example.zingmp3.ui.screens.LoginScreen
-import com.example.zingmp3.ui.screens.PlayerScreen
-import com.example.zingmp3.ui.screens.RegisterScreen
+import com.example.zingmp3.ui.screens.*
 import com.example.zingmp3.ui.viewmodel.MusicViewModel
 
 class MainActivity : ComponentActivity() {
@@ -26,7 +22,6 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val navController = rememberNavController()
-            // Share the ViewModel across screens
             val musicViewModel: MusicViewModel = viewModel()
 
             val startDest = if (!isLoggedIn) {
@@ -59,6 +54,10 @@ class MainActivity : ComponentActivity() {
 
                 composable("player") {
                     PlayerScreen(navController, musicViewModel)
+                }
+
+                composable("profile") {
+                    ProfileScreen(navController)
                 }
             }
         }

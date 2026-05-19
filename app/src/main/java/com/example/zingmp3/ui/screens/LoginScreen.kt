@@ -37,22 +37,33 @@ fun LoginScreen(
         when (loginState) {
             is AuthState.Success -> {
                 val response = (loginState as AuthState.Success).data
-                val sharedPref = context.getSharedPreferences("USER_DATA", MODE_PRIVATE)
-                val role = response.role ?: "user"
+                val user = response.user
                 
-                sharedPref.edit()
-                    .putBoolean("isLoggedIn", true)
-                    .putString("username", login)
-                    .putString("role", role)
-                    .apply()
+                if (user != null && !user.isActive) {
+                    Toast.makeText(context, "Tài khoản của bạn đã bị khóa bởi Admin", Toast.LENGTH_LONG).show()
+                    viewModel.resetState()
+                } else {
+                    val sharedPref = context.getSharedPreferences("USER_DATA", MODE_PRIVATE)
+                    val role = user?.role ?: "user"
+                    
+                    sharedPref.edit()
+                        .putBoolean("isLoggedIn", true)
+                        .putInt("userId", user?.id ?: -1)
+                        .putString("username", user?.username)
+                        .putString("email", user?.email)
+                        .putString("role", role)
+                        .putString("bio", user?.bio)
+                        .putString("avatar_url", user?.avatar_url)
+                        .apply()
 
-                Toast.makeText(context, response.message, Toast.LENGTH_SHORT).show()
-                
-                val destination = if (role == "admin") "admin" else "home"
-                navController.navigate(destination) {
-                    popUpTo("login") { inclusive = true }
+                    Toast.makeText(context, response.message, Toast.LENGTH_SHORT).show()
+                    
+                    val destination = if (role == "admin") "admin" else "home"
+                    navController.navigate(destination) {
+                        popUpTo("login") { inclusive = true }
+                    }
+                    viewModel.resetState()
                 }
-                viewModel.resetState()
             }
             is AuthState.Error -> {
                 Toast.makeText(context, (loginState as AuthState.Error).message, Toast.LENGTH_SHORT).show()

@@ -1,11 +1,13 @@
 package com.example.zingmp3.ui.screens
 
 import android.content.Context.MODE_PRIVATE
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -31,91 +34,62 @@ import com.example.zingmp3.ui.viewmodel.MusicViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavController, musicViewModel: MusicViewModel = viewModel()) {
-    val context = LocalContext.current
-    val sharedPref = context.getSharedPreferences("USER_DATA", MODE_PRIVATE)
-    val username = sharedPref.getString("username", "User")
+    val username by musicViewModel.username.collectAsState()
 
     val songs by musicViewModel.songs.collectAsState()
+    val top10Songs by musicViewModel.top10WeeklySongs.collectAsState()
     val currentSong by musicViewModel.currentSong.collectAsState()
     val isPlaying by musicViewModel.isPlaying.collectAsState()
 
     var selectedItem by remember { mutableIntStateOf(0) }
-    val items = listOf("Home", "Search", "Library", "Premium")
-    val icons = listOf(
-        Icons.Filled.Home,
-        Icons.Filled.Search,
-        Icons.Filled.LibraryMusic,
-        Icons.Filled.WorkspacePremium
-    )
+    
+    val items = remember { listOf("Home", "Search", "Library", "Premium") }
+    val icons = remember { listOf(Icons.Filled.Home, Icons.Filled.Search, Icons.Filled.LibraryMusic, Icons.Filled.WorkspacePremium) }
 
-    val categories = listOf("All", "Music", "Podcasts", "Chill", "Pop", "Rock", "Hip-Hop")
-    val artists = listOf(
-        Artist(1, "Tùng Music", "https://picsum.photos/200"),
-        Artist(2, "Sơn Tùng M-TP", "https://picsum.photos/201"),
-        Artist(3, "Đen Vâu", "https://picsum.photos/202")
-    )
+    val categories = remember { listOf("All", "Music", "Podcasts", "Chill", "Pop", "Rock", "Hip-Hop") }
+    val artists = remember {
+        listOf(
+            Artist(1, "Tùng Music", "https://picsum.photos/200"),
+            Artist(2, "Sơn Tùng M-TP", "https://picsum.photos/201"),
+            Artist(3, "Đen Vâu", "https://picsum.photos/202")
+        )
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.LibraryMusic,
-                            contentDescription = null,
-                            tint = Color(0xFF1DB954),
-                            modifier = Modifier.size(32.dp)
-                        )
+                        Icon(Icons.Filled.LibraryMusic, null, tint = Color(0xFF1DB954), modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Muzic",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 24.sp
-                        )
+                        Text(text = "Muzic", fontWeight = FontWeight.Bold, fontSize = 24.sp)
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* TODO: Notifications */ }) {
-                        Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
-                    }
-                    IconButton(onClick = { /* TODO: Profile */ }) {
-                        Icon(Icons.Filled.AccountCircle, contentDescription = "Profile")
-                    }
+                    IconButton(onClick = { }) { Icon(Icons.Filled.Notifications, null) }
+                    IconButton(onClick = { navController.navigate("profile") }) { Icon(Icons.Filled.AccountCircle, null) }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black,
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black, titleContentColor = Color.White, actionIconContentColor = Color.White)
             )
         },
         bottomBar = {
             Column {
                 currentSong?.let { song ->
                     NowPlayingBar(
-                        song = song,
-                        isPlaying = isPlaying,
-                        onTogglePlay = { musicViewModel.togglePlayPause() },
+                        song = song, 
+                        isPlaying = isPlaying, 
+                        onTogglePlay = musicViewModel::togglePlayPause, 
                         onClick = { navController.navigate("player") }
                     )
                 }
-                NavigationBar(
-                    containerColor = Color.Black,
-                    contentColor = Color.White
-                ) {
+                NavigationBar(containerColor = Color.Black, contentColor = Color.White) {
                     items.forEachIndexed { index, item ->
                         NavigationBarItem(
-                            icon = { Icon(icons[index], contentDescription = item) },
+                            icon = { Icon(icons[index], item) },
                             label = { Text(item) },
                             selected = selectedItem == index,
                             onClick = { selectedItem = index },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color(0xFF1DB954),
-                                selectedTextColor = Color(0xFF1DB954),
-                                unselectedIconColor = Color.Gray,
-                                unselectedTextColor = Color.Gray,
-                                indicatorColor = Color.Transparent
-                            )
+                            colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFF1DB954), selectedTextColor = Color(0xFF1DB954), unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray, indicatorColor = Color.Transparent)
                         )
                     }
                 }
@@ -123,231 +97,142 @@ fun HomeScreen(navController: NavController, musicViewModel: MusicViewModel = vi
         },
         containerColor = Color.Black
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp)
-        ) {
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(categories) { category ->
-                        SuggestionChip(
-                            onClick = { },
-                            label = { Text(category, color = Color.White) },
-                            colors = SuggestionChipDefaults.suggestionChipColors(
-                                containerColor = Color.DarkGray.copy(alpha = 0.5f)
-                            ),
-                            border = null,
-                            shape = RoundedCornerShape(20.dp)
-                        )
+                    items(categories, key = { it }) { category ->
+                        SuggestionChip(onClick = { }, label = { Text(category, color = Color.White) }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color.DarkGray.copy(alpha = 0.5f)), border = null, shape = RoundedCornerShape(20.dp))
                     }
+                }
+            }
+
+            // Section: BXH Top 10 Weekly
+            if (top10Songs.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(text = "BXH Nhạc Mới (Tuần này)", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                itemsIndexed(top10Songs, key = { _, song -> song.id }) { index, song ->
+                    RankingItem(index + 1, song, onClick = {
+                        musicViewModel.playSong(song)
+                        navController.navigate("player")
+                    })
                 }
             }
 
             item {
                 Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "Gợi ý cho $username",
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(text = "Gợi ý cho $username", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(songs) { song ->
-                        SongCard(song, onClick = { musicViewModel.playSong(song) })
+                    items(songs, key = { it.id }) { song ->
+                        SongCard(song, onClick = { 
+                            musicViewModel.playSong(song)
+                            navController.navigate("player")
+                        })
                     }
                 }
             }
 
             item {
                 Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "Nghệ sĩ phổ biến",
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(text = "Nghệ sĩ phổ biến", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(artists) { artist ->
-                        ArtistItem(artist)
-                    }
+                    items(artists, key = { it.id }) { artist -> ArtistItem(artist) }
                 }
             }
 
             item {
                 Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "Mới phát hành",
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(text = "Mới phát hành", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            items(songs) { song ->
-                SongListItem(song, onClick = { musicViewModel.playSong(song) })
+            items(songs, key = { it.id }) { song ->
+                SongListItem(song, onClick = { 
+                    musicViewModel.playSong(song)
+                    navController.navigate("player")
+                })
             }
-
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-                Button(
-                    onClick = {
-                        sharedPref.edit().clear().apply()
-                        navController.navigate("login") {
-                            popUpTo("home") { inclusive = true }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 32.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
-                ) {
-                    Text("Đăng xuất")
-                }
-            }
+            item { Spacer(modifier = Modifier.height(24.dp)) }
         }
+    }
+}
+
+@Composable
+fun RankingItem(rank: Int, song: Song, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clickable { onClick() },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = rank.toString(),
+            color = when(rank) {
+                1 -> Color(0xFF4A90E2)
+                2 -> Color(0xFF50E3C2)
+                3 -> Color(0xFFF5A623)
+                else -> Color.Gray
+            },
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(40.dp)
+        )
+        AsyncImage(model = song.getFullImageUrl(), contentDescription = null, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = song.title, color = Color.White, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp)
+        }
+        Text(text = "${song.views} views", color = Color.DarkGray, fontSize = 11.sp)
     }
 }
 
 @Composable
 fun SongCard(song: Song, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .width(150.dp)
-            .clickable { onClick() }
-    ) {
-        AsyncImage(
-            model = song.getFullImageUrl(),
-            contentDescription = song.title,
-            modifier = Modifier
-                .size(150.dp)
-                .clip(RoundedCornerShape(8.dp)),
-            contentScale = ContentScale.Crop
-        )
+    Column(modifier = Modifier.width(150.dp).clickable { onClick() }) {
+        AsyncImage(model = song.getFullImageUrl(), contentDescription = song.title, modifier = Modifier.size(150.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = song.title,
-            color = Color.White,
-            maxLines = 1,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            text = song.artist_name ?: "Unknown",
-            color = Color.Gray,
-            fontSize = 12.sp,
-            maxLines = 1
-        )
+        Text(text = song.title, color = Color.White, maxLines = 1, fontWeight = FontWeight.SemiBold)
+        Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp, maxLines = 1)
     }
 }
 
 @Composable
 fun ArtistItem(artist: Artist) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(120.dp)
-    ) {
-        AsyncImage(
-            model = artist.getFullAvatarUrl(),
-            contentDescription = artist.stage_name,
-            modifier = Modifier
-                .size(120.dp)
-                .clip(CircleShape),
-            contentScale = ContentScale.Crop
-        )
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(120.dp)) {
+        AsyncImage(model = artist.getFullAvatarUrl(), contentDescription = artist.stage_name, modifier = Modifier.size(120.dp).clip(CircleShape), contentScale = ContentScale.Crop)
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = artist.stage_name,
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium
-        )
+        Text(text = artist.stage_name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
 fun SongListItem(song: Song, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .clickable { onClick() },
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = song.getFullImageUrl(),
-            contentDescription = song.title,
-            modifier = Modifier
-                .size(56.dp)
-                .clip(RoundedCornerShape(4.dp)),
-            contentScale = ContentScale.Crop
-        )
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clickable { onClick() }, verticalAlignment = Alignment.CenterVertically) {
+        AsyncImage(model = song.getFullImageUrl(), contentDescription = song.title, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(text = song.title, color = Color.White, fontWeight = FontWeight.Medium)
             Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp)
         }
-        IconButton(onClick = { /* TODO: More options */ }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = null, tint = Color.Gray)
-        }
+        IconButton(onClick = { }) { Icon(Icons.Filled.MoreVert, null, tint = Color.Gray) }
     }
 }
 
 @Composable
-fun NowPlayingBar(
-    song: Song,
-    isPlaying: Boolean,
-    onTogglePlay: () -> Unit,
-    onClick: () -> Unit
-) {
-    Surface(
-        color = Color(0xFF282828),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable { onClick() }
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 8.dp)
-        ) {
-            AsyncImage(
-                model = song.getFullImageUrl(),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                contentScale = ContentScale.Crop
-            )
+fun NowPlayingBar(song: Song, isPlaying: Boolean, onTogglePlay: () -> Unit, onClick: () -> Unit) {
+    Surface(color = Color(0xFF282828), modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp, vertical = 4.dp).clip(RoundedCornerShape(8.dp)).clickable { onClick() }) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp)) {
+            AsyncImage(model = song.getFullImageUrl(), contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = song.title,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1
-                )
-                Text(
-                    text = song.artist_name ?: "Unknown",
-                    color = Color.Gray,
-                    fontSize = 12.sp,
-                    maxLines = 1
-                )
+                Text(text = song.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp, maxLines = 1)
             }
-            IconButton(onClick = onTogglePlay) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    tint = Color.White
-                )
-            }
+            IconButton(onClick = onTogglePlay) { Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White) }
         }
     }
 }
