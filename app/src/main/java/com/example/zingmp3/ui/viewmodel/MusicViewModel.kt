@@ -153,18 +153,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playSong(song: Song) {
         _currentSong.value = song
-        _isCurrentLiked.value = false
         
-        // Hủy job cũ nếu có
+        // Reset trạng thái cũ và kiểm tra ngay lập tức
+        val userId = getUserId()
+        if (userId != -1) {
+            checkLikeStatus(song.id, userId)
+        } else {
+            _isCurrentLiked.value = false
+        }
+        
+        // Hủy job thống kê cũ
         statsJob?.cancel()
-        
-        // Trì hoãn các API mạng để ưu tiên băng thông cho việc tải nhạc mượt mà
         statsJob = viewModelScope.launch {
-            delay(1500) // Đợi 1.5 giây để nhạc load mượt rồi mới check status
-            val userId = getUserId()
-            if (userId != -1) {
-                checkLikeStatus(song.id, userId)
-            }
+            delay(2000) // Sau khi nghe được 2s mới tính là 1 view
             recordView(song.id)
         }
 
@@ -184,12 +185,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 val response = RetrofitClient.api.checkFavoriteStatus(songId, userId)
                 if (response.isSuccessful) {
                     val body = response.body()
-                    val isFav = body?.get("isFavorite") as? Boolean 
-                                ?: body?.get("isLiked") as? Boolean 
-                                ?: false
+                    // Backend trả về { isFavorite: true/false }
+                    val isFav = body?.get("isFavorite") as? Boolean ?: false
                     _isCurrentLiked.value = isFav
                 }
-            } catch (e: Exception) { /* ignore */ }
+            } catch (e: Exception) {
+                _isCurrentLiked.value = false
+            }
         }
     }
 
