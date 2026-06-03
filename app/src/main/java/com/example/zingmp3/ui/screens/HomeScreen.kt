@@ -183,7 +183,7 @@ fun RankingItem(rank: Int, song: Song, onClick: () -> Unit) {
         AsyncImage(model = song.getFullImageUrl(), contentDescription = null, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = song.title, color = Color.White, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(text = song.title ?: "Unknown Title", color = Color.White, fontWeight = FontWeight.Medium, maxLines = 1)
             Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp)
         }
         Text(text = "${song.views} views", color = Color.DarkGray, fontSize = 11.sp)
@@ -193,9 +193,9 @@ fun RankingItem(rank: Int, song: Song, onClick: () -> Unit) {
 @Composable
 fun SongCard(song: Song, onClick: () -> Unit) {
     Column(modifier = Modifier.width(150.dp).clickable { onClick() }) {
-        AsyncImage(model = song.getFullImageUrl(), contentDescription = song.title, modifier = Modifier.size(150.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+        AsyncImage(model = song.getFullImageUrl(), contentDescription = song.title ?: "Song Cover", modifier = Modifier.size(150.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
         Spacer(modifier = Modifier.height(8.dp))
-        Text(text = song.title, color = Color.White, maxLines = 1, fontWeight = FontWeight.SemiBold)
+        Text(text = song.title ?: "Unknown Title", color = Color.White, maxLines = 1, fontWeight = FontWeight.SemiBold)
         Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp, maxLines = 1)
     }
 }
@@ -212,10 +212,10 @@ fun ArtistItem(artist: Artist) {
 @Composable
 fun SongListItem(song: Song, onClick: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clickable { onClick() }, verticalAlignment = Alignment.CenterVertically) {
-        AsyncImage(model = song.getFullImageUrl(), contentDescription = song.title, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
+        AsyncImage(model = song.getFullImageUrl(), contentDescription = song.title ?: "Song Cover", modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = song.title, color = Color.White, fontWeight = FontWeight.Medium)
+            Text(text = song.title ?: "Unknown Title", color = Color.White, fontWeight = FontWeight.Medium)
             Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp)
         }
         IconButton(onClick = { }) { Icon(Icons.Filled.MoreVert, null, tint = Color.Gray) }
@@ -229,7 +229,7 @@ fun NowPlayingBar(song: Song, isPlaying: Boolean, onTogglePlay: () -> Unit, onCl
             AsyncImage(model = song.getFullImageUrl(), contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = song.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text(text = song.title ?: "Unknown Title", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                 Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp, maxLines = 1)
             }
             IconButton(onClick = onTogglePlay) { Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White) }

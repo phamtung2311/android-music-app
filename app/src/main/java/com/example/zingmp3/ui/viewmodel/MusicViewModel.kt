@@ -127,8 +127,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                             _currentSong.value = updated
                         }
                     }
+                } else {
+                    android.util.Log.e("MusicViewModel", "Fetch songs failed: ${response.code()} ${response.message()}")
                 }
-            } catch (e: Exception) { /* ignore */ }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Error fetching songs", e)
+            }
         }
     }
 
@@ -138,8 +142,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 val response = RetrofitClient.api.getTopWeeklySongs()
                 if (response.isSuccessful) {
                     _topWeeklySongs.value = response.body() ?: emptyList()
+                } else {
+                    android.util.Log.e("MusicViewModel", "Fetch top weekly failed: ${response.code()}")
                 }
-            } catch (e: Exception) { /* ignore */ }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Error fetching top weekly", e)
+            }
         }
     }
 

@@ -62,7 +62,7 @@ fun PlayerScreen(navController: NavController, musicViewModel: MusicViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            SongInfo(title = song.title, artist = song.artist_name ?: "Unknown Artist")
+            SongInfo(title = song.title ?: "Unknown Title", artist = song.artist_name ?: "Unknown Artist")
 
             Spacer(modifier = Modifier.height(24.dp))
 

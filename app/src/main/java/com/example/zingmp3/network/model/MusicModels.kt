@@ -7,10 +7,10 @@ import androidx.compose.runtime.Immutable
 @Immutable
 data class Song(
     @SerializedName("id") val id: Int,
-    @SerializedName("title") val title: String,
+    @SerializedName("title") val title: String? = null,
     @SerializedName("artist_id") val artist_id: Int? = null,
     @SerializedName("artist_name") val artist_name: String? = null,
-    @SerializedName("audio_url") val audio_url: String,
+    @SerializedName("audio_url") val audio_url: String? = null,
     @SerializedName("image_url") val image_url: String? = null,
     @SerializedName("genre") val genre: String? = null,
     @SerializedName("duration") val duration: Int? = null,
@@ -19,7 +19,8 @@ data class Song(
     @SerializedName("is_public") val isPublic: Boolean = true
 ) {
     fun getFullAudioUrl(): String {
-        return if (audio_url.startsWith("http")) audio_url else RetrofitClient.BASE_URL + audio_url
+        val url = audio_url ?: ""
+        return if (url.startsWith("http")) url else RetrofitClient.BASE_URL + url
     }
 
     fun getFullImageUrl(): String? {
