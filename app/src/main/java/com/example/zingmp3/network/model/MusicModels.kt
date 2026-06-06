@@ -50,3 +50,10 @@ data class Playlist(
     val image_url: String? = null,
     val user_id: Int
 )
+
+@Immutable
+data class Genre(
+    @SerializedName("id") val id: Int,
+    @SerializedName("name") val name: String,
+    @SerializedName("description") val description: String? = null
+)

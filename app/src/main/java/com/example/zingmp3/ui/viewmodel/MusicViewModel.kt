@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -23,7 +24,22 @@ import kotlinx.coroutines.launch
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
+    private val _genres = MutableStateFlow<List<String>>(listOf("All"))
+    val genres: StateFlow<List<String>> = _genres
+
+    private val _selectedGenre = MutableStateFlow("All")
+    val selectedGenre: StateFlow<String> = _selectedGenre
+
     val songs: StateFlow<List<Song>> = _songs
+        .combine(_selectedGenre) { songList, genre ->
+            if (genre == "All") songList
+            else songList.filter { it.genre?.contains(genre, ignoreCase = true) == true }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setGenre(genre: String) {
+        _selectedGenre.value = genre
+    }
 
     private val _topWeeklySongs = MutableStateFlow<List<Song>>(emptyList())
     val topWeeklySongs: StateFlow<List<Song>> = _topWeeklySongs
@@ -71,6 +87,21 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshData() {
         fetchSongs()
         fetchTopWeekly()
+        fetchGenres()
+    }
+
+    private fun fetchGenres() {
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.api.getGenres()
+                if (response.isSuccessful) {
+                    val genreList = response.body()?.map { it.name } ?: emptyList()
+                    _genres.value = listOf("All") + genreList
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Error fetching genres", e)
+            }
+        }
     }
 
     private fun getUserId(): Int = sharedPref.getInt("userId", -1)

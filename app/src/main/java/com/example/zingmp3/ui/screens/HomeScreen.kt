@@ -40,13 +40,14 @@ fun HomeScreen(navController: NavController, musicViewModel: MusicViewModel = vi
     val top10Songs by musicViewModel.top10WeeklySongs.collectAsState()
     val currentSong by musicViewModel.currentSong.collectAsState()
     val isPlaying by musicViewModel.isPlaying.collectAsState()
+    val selectedGenre by musicViewModel.selectedGenre.collectAsState()
+    val genres by musicViewModel.genres.collectAsState()
 
     var selectedItem by remember { mutableIntStateOf(0) }
     
     val items = remember { listOf("Home", "Search", "Library", "Premium") }
     val icons = remember { listOf(Icons.Filled.Home, Icons.Filled.Search, Icons.Filled.LibraryMusic, Icons.Filled.WorkspacePremium) }
 
-    val categories = remember { listOf("All", "Music", "Podcasts", "Chill", "Pop", "Rock", "Hip-Hop") }
     val artists = remember {
         listOf(
             Artist(1, "Tùng Music", "https://picsum.photos/200"),
@@ -101,8 +102,17 @@ fun HomeScreen(navController: NavController, musicViewModel: MusicViewModel = vi
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(categories, key = { it }) { category ->
-                        SuggestionChip(onClick = { }, label = { Text(category, color = Color.White) }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color.DarkGray.copy(alpha = 0.5f)), border = null, shape = RoundedCornerShape(20.dp))
+                    items(genres, key = { it }) { category ->
+                        val isSelected = selectedGenre == category
+                        SuggestionChip(
+                            onClick = { musicViewModel.setGenre(category) },
+                            label = { Text(category, color = if (isSelected) Color.Black else Color.White) },
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = if (isSelected) Color(0xFF1DB954) else Color.DarkGray.copy(alpha = 0.5f)
+                            ),
+                            border = null,
+                            shape = RoundedCornerShape(20.dp)
+                        )
                     }
                 }
             }

@@ -45,6 +45,9 @@ interface ApiService {
     @GET("songs/top-weekly")
     suspend fun getTopWeeklySongs(): Response<List<Song>>
 
+    @GET("genres")
+    suspend fun getGenres(): Response<List<Genre>>
+
     // API Kiểm tra trạng thái
     @GET("songs/{id}/check-favorite")
     suspend fun checkFavoriteStatus(
