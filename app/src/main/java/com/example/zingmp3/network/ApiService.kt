@@ -54,4 +54,26 @@ interface ApiService {
         @Path("id") songId: Int,
         @Query("userId") userId: Int
     ): Response<Map<String, Any>>
+
+    // Playlists
+    @GET("api/playlists")
+    suspend fun getPlaylists(@Query("userId") userId: Int): Response<List<Playlist>>
+
+    @POST("api/playlists")
+    suspend fun createPlaylist(@Body request: CreatePlaylistRequest): Response<Playlist>
+
+    @GET("api/playlists/{id}")
+    suspend fun getPlaylistDetails(@Path("id") playlistId: Int): Response<PlaylistDetail>
+
+    @POST("api/playlists/{id}/songs")
+    suspend fun addSongToPlaylist(
+        @Path("id") playlistId: Int,
+        @Body request: AddSongRequest
+    ): Response<Map<String, Any>>
+
+    @DELETE("api/playlists/{id}/songs/{songId}")
+    suspend fun removeSongFromPlaylist(
+        @Path("id") playlistId: Int,
+        @Path("songId") songId: Int
+    ): Response<Map<String, Any>>
 }

@@ -30,10 +30,15 @@ import coil.compose.AsyncImage
 import com.example.zingmp3.network.model.Artist
 import com.example.zingmp3.network.model.Song
 import com.example.zingmp3.ui.viewmodel.MusicViewModel
+import com.example.zingmp3.ui.viewmodel.PlaylistViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(navController: NavController, musicViewModel: MusicViewModel = viewModel()) {
+fun HomeScreen(
+    navController: NavController, 
+    musicViewModel: MusicViewModel = viewModel(),
+    playlistViewModel: PlaylistViewModel = viewModel()
+) {
     val username by musicViewModel.username.collectAsState()
 
     val songs by musicViewModel.songs.collectAsState()
@@ -44,6 +49,7 @@ fun HomeScreen(navController: NavController, musicViewModel: MusicViewModel = vi
     val genres by musicViewModel.genres.collectAsState()
 
     var selectedItem by remember { mutableIntStateOf(0) }
+    var songToAddToPlaylist by remember { mutableStateOf<Song?>(null) }
     
     val items = remember { listOf("Home", "Search", "Library", "Premium") }
     val icons = remember { listOf(Icons.Filled.Home, Icons.Filled.Search, Icons.Filled.LibraryMusic, Icons.Filled.WorkspacePremium) }
@@ -98,82 +104,96 @@ fun HomeScreen(navController: NavController, musicViewModel: MusicViewModel = vi
         },
         containerColor = Color.Black
     ) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(genres, key = { it }) { category ->
-                        val isSelected = selectedGenre == category
-                        SuggestionChip(
-                            onClick = { musicViewModel.setGenre(category) },
-                            label = { Text(category, color = if (isSelected) Color.Black else Color.White) },
-                            colors = SuggestionChipDefaults.suggestionChipColors(
-                                containerColor = if (isSelected) Color(0xFF1DB954) else Color.DarkGray.copy(alpha = 0.5f)
-                            ),
-                            border = null,
-                            shape = RoundedCornerShape(20.dp)
-                        )
+        if (selectedItem == 2) {
+            Box(modifier = Modifier.padding(padding)) {
+                LibraryScreen(navController, playlistViewModel)
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(genres, key = { it }) { category ->
+                            val isSelected = selectedGenre == category
+                            SuggestionChip(
+                                onClick = { musicViewModel.setGenre(category) },
+                                label = { Text(category, color = if (isSelected) Color.Black else Color.White) },
+                                colors = SuggestionChipDefaults.suggestionChipColors(
+                                    containerColor = if (isSelected) Color(0xFF1DB954) else Color.DarkGray.copy(alpha = 0.5f)
+                                ),
+                                border = null,
+                                shape = RoundedCornerShape(20.dp)
+                            )
+                        }
                     }
                 }
-            }
 
-            // Section: BXH Top 10 Weekly
-            if (top10Songs.isNotEmpty()) {
-                item {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(text = "BXH Nhạc Mới (Tuần này)", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-                itemsIndexed(top10Songs, key = { _, song -> song.id }) { index, song ->
-                    RankingItem(index + 1, song, onClick = {
-                        musicViewModel.playSong(song)
-                        navController.navigate("player")
-                    })
-                }
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(text = "Gợi ý cho $username", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(16.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(songs, key = { it.id }) { song ->
-                        SongCard(song, onClick = { 
+                // Section: BXH Top 10 Weekly
+                if (top10Songs.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(text = "BXH Nhạc Mới (Tuần này)", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                    itemsIndexed(top10Songs, key = { _, song -> song.id }) { index, song ->
+                        RankingItem(index + 1, song, onClick = {
                             musicViewModel.playSong(song)
                             navController.navigate("player")
-                        })
+                        }, onMoreClick = { songToAddToPlaylist = song })
                     }
                 }
-            }
 
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(text = "Nghệ sĩ phổ biến", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(16.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(artists, key = { it.id }) { artist -> ArtistItem(artist) }
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(text = "Gợi ý cho $username", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        items(songs, key = { it.id }) { song ->
+                            SongCard(song, onClick = { 
+                                musicViewModel.playSong(song)
+                                navController.navigate("player")
+                            })
+                        }
+                    }
                 }
-            }
 
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(text = "Mới phát hành", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(16.dp))
-            }
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(text = "Nghệ sĩ phổ biến", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        items(artists, key = { it.id }) { artist -> ArtistItem(artist) }
+                    }
+                }
 
-            items(songs, key = { it.id }) { song ->
-                SongListItem(song, onClick = { 
-                    musicViewModel.playSong(song)
-                    navController.navigate("player")
-                })
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(text = "Mới phát hành", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                items(songs, key = { it.id }) { song ->
+                    SongListItem(song, onClick = { 
+                        musicViewModel.playSong(song)
+                        navController.navigate("player")
+                    }, onMoreClick = { songToAddToPlaylist = song })
+                }
+                item { Spacer(modifier = Modifier.height(24.dp)) }
             }
-            item { Spacer(modifier = Modifier.height(24.dp)) }
         }
+    }
+
+    songToAddToPlaylist?.let { song ->
+        AddToPlaylistBottomSheet(
+            song = song,
+            viewModel = playlistViewModel,
+            onDismiss = { songToAddToPlaylist = null }
+        )
     }
 }
 
 @Composable
-fun RankingItem(rank: Int, song: Song, onClick: () -> Unit) {
+fun RankingItem(rank: Int, song: Song, onClick: () -> Unit, onMoreClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clickable { onClick() },
         verticalAlignment = Alignment.CenterVertically
@@ -197,6 +217,7 @@ fun RankingItem(rank: Int, song: Song, onClick: () -> Unit) {
             Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp)
         }
         Text(text = "${song.views} views", color = Color.DarkGray, fontSize = 11.sp)
+        IconButton(onClick = onMoreClick) { Icon(Icons.Filled.MoreVert, null, tint = Color.Gray) }
     }
 }
 
@@ -220,7 +241,7 @@ fun ArtistItem(artist: Artist) {
 }
 
 @Composable
-fun SongListItem(song: Song, onClick: () -> Unit) {
+fun SongListItem(song: Song, onClick: () -> Unit, onMoreClick: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clickable { onClick() }, verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(model = song.getFullImageUrl(), contentDescription = song.title ?: "Song Cover", modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
         Spacer(modifier = Modifier.width(12.dp))
@@ -228,7 +249,7 @@ fun SongListItem(song: Song, onClick: () -> Unit) {
             Text(text = song.title ?: "Unknown Title", color = Color.White, fontWeight = FontWeight.Medium)
             Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp)
         }
-        IconButton(onClick = { }) { Icon(Icons.Filled.MoreVert, null, tint = Color.Gray) }
+        IconButton(onClick = onMoreClick) { Icon(Icons.Filled.MoreVert, null, tint = Color.Gray) }
     }
 }
 

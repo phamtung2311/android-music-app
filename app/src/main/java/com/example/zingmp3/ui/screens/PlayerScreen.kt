@@ -25,13 +25,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
+import com.example.zingmp3.network.model.Song
 import com.example.zingmp3.ui.viewmodel.MusicViewModel
+import com.example.zingmp3.ui.viewmodel.PlaylistViewModel
 import java.util.concurrent.TimeUnit
 
 @Composable
-fun PlayerScreen(navController: NavController, musicViewModel: MusicViewModel) {
+fun PlayerScreen(
+    navController: NavController, 
+    musicViewModel: MusicViewModel,
+    playlistViewModel: PlaylistViewModel
+) {
     val currentSong by musicViewModel.currentSong.collectAsState()
     val isPlaying by musicViewModel.isPlaying.collectAsState()
+
+    var showAddToPlaylist by remember { mutableStateOf(false) }
 
     val backgroundBrush = remember {
         Brush.verticalGradient(listOf(Color(0xFF333333), Color.Black))
@@ -47,7 +55,8 @@ fun PlayerScreen(navController: NavController, musicViewModel: MusicViewModel) {
         ) {
             PlayerHeader(
                 onBack = { navController.popBackStack() },
-                onAddFavorite = { musicViewModel.favoriteSong(song.id) }
+                onAddFavorite = { musicViewModel.favoriteSong(song.id) },
+                onAddToPlaylist = { showAddToPlaylist = true }
             )
 
             Spacer(modifier = Modifier.weight(0.5f))
@@ -83,6 +92,14 @@ fun PlayerScreen(navController: NavController, musicViewModel: MusicViewModel) {
             )
             
             Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        if (showAddToPlaylist) {
+            AddToPlaylistBottomSheet(
+                song = song,
+                viewModel = playlistViewModel,
+                onDismiss = { showAddToPlaylist = false }
+            )
         }
     }
 }
@@ -193,7 +210,7 @@ fun PlaybackProgress(musicViewModel: MusicViewModel) {
 }
 
 @Composable
-fun PlayerHeader(onBack: () -> Unit, onAddFavorite: () -> Unit) {
+fun PlayerHeader(onBack: () -> Unit, onAddFavorite: () -> Unit, onAddToPlaylist: () -> Unit) {
     var showMenu by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -211,6 +228,14 @@ fun PlayerHeader(onBack: () -> Unit, onAddFavorite: () -> Unit) {
                         Toast.makeText(context, "Đã thêm vào yêu thích", Toast.LENGTH_SHORT).show()
                     },
                     leadingIcon = { Icon(Icons.Default.Favorite, null, tint = Color.Red) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Thêm vào playlist", color = Color.White) },
+                    onClick = {
+                        onAddToPlaylist()
+                        showMenu = false
+                    },
+                    leadingIcon = { Icon(Icons.Default.PlaylistAdd, null, tint = Color.White) }
                 )
             }
         }

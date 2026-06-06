@@ -45,10 +45,26 @@ data class Artist(
 
 @Immutable
 data class Playlist(
-    val id: Int,
-    val name: String,
-    val image_url: String? = null,
-    val user_id: Int
+    @SerializedName("id") val id: Int,
+    @SerializedName("name") val name: String,
+    @SerializedName("image_url") val image_url: String? = null,
+    @SerializedName("user_id") val user_id: Int,
+    @SerializedName("songs_count") val songsCount: Int = 0
+)
+
+data class CreatePlaylistRequest(
+    @SerializedName("name") val name: String,
+    @SerializedName("user_id") val userId: Int
+)
+
+data class AddSongRequest(
+    @SerializedName("song_id") val songId: Int
+)
+
+data class PlaylistDetail(
+    @SerializedName("id") val id: Int,
+    @SerializedName("name") val name: String,
+    @SerializedName("songs") val songs: List<Song> = emptyList()
 )
 
 @Immutable

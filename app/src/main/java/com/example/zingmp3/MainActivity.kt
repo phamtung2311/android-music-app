@@ -8,8 +8,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import com.example.zingmp3.ui.screens.*
 import com.example.zingmp3.ui.viewmodel.MusicViewModel
+import com.example.zingmp3.ui.viewmodel.PlaylistViewModel
 
 class MainActivity : ComponentActivity() {
 
@@ -23,6 +26,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val navController = rememberNavController()
             val musicViewModel: MusicViewModel = viewModel()
+            val playlistViewModel: PlaylistViewModel = viewModel()
 
             val startDest = if (!isLoggedIn) {
                 "login"
@@ -45,7 +49,15 @@ class MainActivity : ComponentActivity() {
                 }
 
                 composable("home") {
-                    HomeScreen(navController, musicViewModel)
+                    HomeScreen(navController, musicViewModel, playlistViewModel)
+                }
+
+                composable(
+                    "playlist_detail/{playlistId}",
+                    arguments = listOf(navArgument("playlistId") { type = NavType.IntType })
+                ) { backStackEntry ->
+                    val playlistId = backStackEntry.arguments?.getInt("playlistId") ?: 0
+                    PlaylistDetailScreen(navController, playlistId, playlistViewModel, musicViewModel)
                 }
 
                 composable("admin") {
@@ -53,7 +65,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 composable("player") {
-                    PlayerScreen(navController, musicViewModel)
+                    PlayerScreen(navController, musicViewModel, playlistViewModel)
                 }
 
                 composable("profile") {
