@@ -125,6 +125,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     override fun onIsPlayingChanged(isPlayingNow: Boolean) {
                         _isPlaying.value = isPlayingNow
                     }
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        android.util.Log.e("MusicViewModel", "Player error: ${error.message}", error)
+                        _isPlaying.value = false
+                    }
                 })
             }
     }
@@ -132,10 +136,17 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private fun updateProgress() {
         viewModelScope.launch {
             while (true) {
-                exoPlayer?.let {
-                    if (it.isPlaying) {
-                        _currentPosition.value = it.currentPosition
+                try {
+                    exoPlayer?.let { player ->
+                        if (player.playbackState != Player.STATE_IDLE && 
+                            player.playbackState != Player.STATE_ENDED) {
+                            if (player.isPlaying) {
+                                _currentPosition.value = player.currentPosition
+                            }
+                        }
                     }
+                } catch (e: Exception) {
+                    android.util.Log.e("MusicViewModel", "Error in updateProgress", e)
                 }
                 delay(1000)
             }

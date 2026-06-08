@@ -135,7 +135,7 @@ fun HomeScreen(
                         Text(text = "BXH Nhạc Mới (Tuần này)", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(16.dp))
                     }
-                    itemsIndexed(top10Songs, key = { _, song -> song.id }) { index, song ->
+                    itemsIndexed(top10Songs, key = { _, song -> "top_${song.id}" }) { index, song ->
                         RankingItem(index + 1, song, onClick = {
                             musicViewModel.playSong(song)
                             navController.navigate("player")
@@ -172,7 +172,7 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                items(songs, key = { it.id }) { song ->
+                items(songs, key = { "recent_${it.id}" }) { song ->
                     SongListItem(song, onClick = { 
                         musicViewModel.playSong(song)
                         navController.navigate("player")

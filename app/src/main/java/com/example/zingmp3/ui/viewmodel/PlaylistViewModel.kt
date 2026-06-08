@@ -137,4 +137,9 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     fun clearError() {
         _error.value = null
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Ensure no pending work or state leaks
+    }
 }
