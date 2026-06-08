@@ -65,6 +65,15 @@ interface ApiService {
     @GET("api/playlists/{id}")
     suspend fun getPlaylistDetails(@Path("id") playlistId: Int): Response<PlaylistDetail>
 
+    @PUT("api/playlists/{id}")
+    suspend fun updatePlaylist(
+        @Path("id") playlistId: Int,
+        @Body request: UpdatePlaylistRequest
+    ): Response<Playlist>
+
+    @DELETE("api/playlists/{id}")
+    suspend fun deletePlaylist(@Path("id") playlistId: Int): Response<Map<String, Any>>
+
     @POST("api/playlists/{id}/songs")
     suspend fun addSongToPlaylist(
         @Path("id") playlistId: Int,

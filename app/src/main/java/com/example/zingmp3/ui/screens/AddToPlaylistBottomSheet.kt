@@ -84,7 +84,7 @@ fun AddToPlaylistBottomSheet(
                     items(playlists) { playlist ->
                         ListItem(
                             headlineContent = { Text(playlist.name, color = Color.White) },
-                            supportingContent = { Text("${playlist.songsCount} bài hát", color = Color.Gray) },
+                            supportingContent = { Text("${playlist.realSongsCount} bài hát", color = Color.Gray) },
                             leadingContent = { Icon(Icons.Default.PlaylistPlay, contentDescription = null, tint = Color.Gray) },
                             modifier = Modifier.clickable {
                                 viewModel.addSongToPlaylist(playlist.id, song.id) {

@@ -106,7 +106,7 @@ fun HomeScreen(
     ) { padding ->
         if (selectedItem == 2) {
             Box(modifier = Modifier.padding(padding)) {
-                LibraryScreen(navController, playlistViewModel)
+                LibraryScreen(navController, playlistViewModel, musicViewModel)
             }
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {

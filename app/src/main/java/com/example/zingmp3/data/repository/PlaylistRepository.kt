@@ -18,6 +18,14 @@ class PlaylistRepository {
         return RetrofitClient.api.getPlaylistDetails(playlistId)
     }
 
+    suspend fun updatePlaylist(playlistId: Int, name: String): Response<Playlist> {
+        return RetrofitClient.api.updatePlaylist(playlistId, UpdatePlaylistRequest(name))
+    }
+
+    suspend fun deletePlaylist(playlistId: Int): Response<Map<String, Any>> {
+        return RetrofitClient.api.deletePlaylist(playlistId)
+    }
+
     suspend fun addSongToPlaylist(playlistId: Int, songId: Int): Response<Map<String, Any>> {
         return RetrofitClient.api.addSongToPlaylist(playlistId, AddSongRequest(songId))
     }

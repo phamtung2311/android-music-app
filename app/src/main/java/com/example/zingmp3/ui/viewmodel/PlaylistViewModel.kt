@@ -83,6 +83,44 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun updatePlaylist(playlistId: Int, newName: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val response = repository.updatePlaylist(playlistId, newName)
+                if (response.isSuccessful) {
+                    fetchPlaylists()
+                    onSuccess()
+                } else {
+                    _error.value = "Không thể cập nhật tên playlist"
+                }
+            } catch (e: Exception) {
+                _error.value = e.localizedMessage
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun deletePlaylist(playlistId: Int, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val response = repository.deletePlaylist(playlistId)
+                if (response.isSuccessful) {
+                    fetchPlaylists()
+                    onSuccess()
+                } else {
+                    _error.value = "Không thể xóa playlist"
+                }
+            } catch (e: Exception) {
+                _error.value = e.localizedMessage
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     fun fetchPlaylistDetails(playlistId: Int) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -90,7 +128,14 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
             try {
                 val response = repository.getPlaylistDetails(playlistId)
                 if (response.isSuccessful) {
-                    _playlistDetail.value = response.body()
+                    val detail = response.body()
+                    _playlistDetail.value = detail
+                    // Đồng bộ số lượng bài hát vào danh sách playlists
+                    detail?.let { d ->
+                        _playlists.value = _playlists.value.map { p ->
+                            if (p.id == d.id) p.copy(songsCount = d.songs.size) else p
+                        }
+                    }
                 } else {
                     _error.value = "Failed to load playlist details"
                 }
@@ -107,7 +152,11 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
             try {
                 val response = repository.addSongToPlaylist(playlistId, songId)
                 if (response.isSuccessful) {
-                    fetchPlaylists() // Refresh to update song count
+                    // Cập nhật số lượng bài hát cục bộ ngay lập tức
+                    _playlists.value = _playlists.value.map { p ->
+                        if (p.id == playlistId) p.copy(songsCount = p.songsCount + 1) else p
+                    }
+                    fetchPlaylists() // Đồng bộ lại với server
                     onSuccess()
                 } else {
                     // Handle error (e.g., song already in playlist)
@@ -125,8 +174,12 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
             try {
                 val response = repository.removeSongFromPlaylist(playlistId, songId)
                 if (response.isSuccessful) {
+                    // Cập nhật số lượng bài hát cục bộ ngay lập tức
+                    _playlists.value = _playlists.value.map { p ->
+                        if (p.id == playlistId) p.copy(songsCount = (p.songsCount - 1).coerceAtLeast(0)) else p
+                    }
                     fetchPlaylistDetails(playlistId)
-                    fetchPlaylists() // Update counts
+                    fetchPlaylists() // Đồng bộ lại với server
                 }
             } catch (e: Exception) {
                 _error.value = e.localizedMessage

@@ -70,6 +70,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val isCurrentLiked: StateFlow<Boolean> = _isCurrentLiked
 
     private var exoPlayer: ExoPlayer? = null
+    private var currentPlayQueue: List<Song> = emptyList()
     private val sharedPref = application.getSharedPreferences("USER_DATA", android.content.Context.MODE_PRIVATE)
     private var statsJob: Job? = null
 
@@ -122,6 +123,27 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                             _duration.value = duration
                         }
                     }
+
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        super.onMediaItemTransition(mediaItem, reason)
+                        val index = currentMediaItemIndex
+                        if (index >= 0 && index < currentPlayQueue.size) {
+                            val song = currentPlayQueue[index]
+                            _currentSong.value = song
+                            
+                            val userId = getUserId()
+                            if (userId != -1) {
+                                checkLikeStatus(song.id, userId)
+                            }
+                            
+                            statsJob?.cancel()
+                            statsJob = viewModelScope.launch {
+                                delay(2000)
+                                recordView(song.id)
+                            }
+                        }
+                    }
+
                     override fun onIsPlayingChanged(isPlayingNow: Boolean) {
                         _isPlaying.value = isPlayingNow
                     }
@@ -194,6 +216,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playSong(song: Song) {
+        currentPlayQueue = listOf(song)
         _currentSong.value = song
         
         // Reset trạng thái cũ và kiểm tra ngay lập tức
@@ -216,6 +239,35 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             player.clearMediaItems()
             val mediaItem = MediaItem.fromUri(song.getFullAudioUrl())
             player.setMediaItem(mediaItem)
+            player.prepare()
+            player.play()
+        }
+    }
+
+    fun playPlaylist(songs: List<Song>, startIndex: Int = 0) {
+        if (songs.isEmpty()) return
+        currentPlayQueue = songs
+        
+        val firstSong = songs[startIndex]
+        _currentSong.value = firstSong
+        
+        val userId = getUserId()
+        if (userId != -1) {
+            checkLikeStatus(firstSong.id, userId)
+        }
+        
+        statsJob?.cancel()
+        statsJob = viewModelScope.launch {
+            delay(2000)
+            recordView(firstSong.id)
+        }
+
+        exoPlayer?.let { player ->
+            player.stop()
+            player.clearMediaItems()
+            val mediaItems = songs.map { MediaItem.fromUri(it.getFullAudioUrl()) }
+            player.addMediaItems(mediaItems)
+            player.seekTo(startIndex, 0L)
             player.prepare()
             player.play()
         }

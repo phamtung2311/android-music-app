@@ -45,7 +45,14 @@ fun PlaylistDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(playlistDetail?.name ?: "Playlist", fontWeight = FontWeight.Bold) },
+                title = {
+                    Column {
+                        Text(playlistDetail?.name ?: "Playlist", fontWeight = FontWeight.Bold)
+                        playlistDetail?.let {
+                            Text("${it.songs.size} bài hát", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Normal)
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")

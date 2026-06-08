@@ -49,12 +49,20 @@ data class Playlist(
     @SerializedName("name") val name: String,
     @SerializedName("image_url") val image_url: String? = null,
     @SerializedName("user_id") val user_id: Int,
-    @SerializedName("songs_count") val songsCount: Int = 0
-)
+    @SerializedName("songs_count") val songsCount: Int = 0,
+    @SerializedName("song_count") val songCountFallback: Int = 0
+) {
+    val realSongsCount: Int
+        get() = if (songsCount > 0) songsCount else songCountFallback
+}
 
 data class CreatePlaylistRequest(
     @SerializedName("name") val name: String,
     @SerializedName("user_id") val userId: Int
+)
+
+data class UpdatePlaylistRequest(
+    @SerializedName("name") val name: String
 )
 
 data class AddSongRequest(
