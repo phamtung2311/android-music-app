@@ -54,6 +54,18 @@ interface ApiService {
     @GET("api/artists/{id}/songs")
     suspend fun getArtistSongs(@Path("id") artistId: Int): Response<List<Song>>
 
+    @POST("api/artists/{id}/follow")
+    suspend fun followArtist(
+        @Path("id") artistId: Int,
+        @Query("userId") userId: Int
+    ): Response<Map<String, Any>>
+
+    @GET("api/artists/{id}/check-follow")
+    suspend fun checkFollowStatus(
+        @Path("id") artistId: Int,
+        @Query("userId") userId: Int
+    ): Response<Map<String, Any>>
+
     // API Kiểm tra trạng thái
     @GET("songs/{id}/check-favorite")
     suspend fun checkFavoriteStatus(

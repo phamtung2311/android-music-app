@@ -90,6 +90,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isCurrentLiked = MutableStateFlow(false)
     val isCurrentLiked: StateFlow<Boolean> = _isCurrentLiked
 
+    private val _isArtistFollowed = MutableStateFlow(false)
+    val isArtistFollowed: StateFlow<Boolean> = _isArtistFollowed
+
     private var exoPlayer: ExoPlayer? = null
     private var currentPlayQueue: List<Song> = emptyList()
     private val sharedPref = application.getSharedPreferences("USER_DATA", android.content.Context.MODE_PRIVATE)
@@ -320,6 +323,39 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             player.seekTo(startIndex, 0L)
             player.prepare()
             player.play()
+        }
+    }
+
+    fun checkFollowStatus(artistId: Int) {
+        val userId = getUserId()
+        if (userId == -1) return
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.api.checkFollowStatus(artistId, userId)
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    _isArtistFollowed.value = body?.get("isFollowing") as? Boolean ?: false
+                }
+            } catch (e: Exception) {
+                _isArtistFollowed.value = false
+            }
+        }
+    }
+
+    fun followArtist(artistId: Int) {
+        val userId = getUserId()
+        if (userId == -1) return
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.api.followArtist(artistId, userId)
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    _isArtistFollowed.value = body?.get("isFollowing") as? Boolean ?: false
+                    fetchArtists() // Refresh to update follower count
+                }
+            } catch (e: Exception) {
+                // handle error
+            }
         }
     }
 

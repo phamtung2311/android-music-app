@@ -1,5 +1,6 @@
 package com.example.zingmp3.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,6 +37,7 @@ fun ArtistDetailScreen(
     val artists by musicViewModel.artists.collectAsState()
     val artist = remember(artists, artistId) { artists.find { it.id == artistId } }
     val songs by musicViewModel.artistSongs.collectAsState()
+    val isFollowed by musicViewModel.isArtistFollowed.collectAsState()
     
     val sortedSongs = remember(songs) {
         songs.sortedByDescending { it.releaseDate ?: "" }
@@ -42,6 +45,7 @@ fun ArtistDetailScreen(
 
     LaunchedEffect(artistId) {
         musicViewModel.fetchArtistSongs(artistId)
+        musicViewModel.checkFollowStatus(artistId)
     }
 
     Scaffold(
@@ -111,6 +115,42 @@ fun ArtistDetailScreen(
                         color = Color.Gray,
                         fontSize = 14.sp
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                if (sortedSongs.isNotEmpty()) {
+                                    musicViewModel.playPlaylist(sortedSongs, 0)
+                                    navController.navigate("player")
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954)),
+                            shape = CircleShape,
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Phát tất cả", color = Color.White)
+                        }
+
+                        OutlinedButton(
+                            onClick = { musicViewModel.followArtist(artistId) },
+                            shape = CircleShape,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isFollowed) Color(0xFF1DB954) else Color.Gray
+                            )
+                        ) {
+                            Text(
+                                text = if (isFollowed) "Đã quan tâm" else "Quan tâm",
+                                color = if (isFollowed) Color(0xFF1DB954) else Color.White
+                            )
+                        }
+                    }
                 }
             }
 
