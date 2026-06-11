@@ -10,6 +10,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.zingmp3.network.RetrofitClient
+import com.example.zingmp3.network.model.Artist
 import com.example.zingmp3.network.model.Song
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,8 +25,22 @@ import kotlinx.coroutines.launch
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
-    private val _genres = MutableStateFlow<List<String>>(listOf("All"))
-    val genres: StateFlow<List<String>> = _genres
+    private val _rawGenres = MutableStateFlow<List<String>>(emptyList())
+
+    val genres: StateFlow<List<String>> = combine(_songs, _rawGenres) { songList, rawGenres ->
+        if (rawGenres.isEmpty()) listOf("All")
+        else {
+            // Đếm số lượng bài hát cho mỗi thể loại
+            val genreCounts = songList.groupingBy { it.genre ?: "Unknown" }.eachCount()
+            
+            // Sắp xếp các thể loại từ server dựa trên số lượng bài hát (nhiều nhất lên đầu)
+            val sortedGenres = rawGenres.sortedByDescending { genreName ->
+                // Tìm số lượng bài hát của thể loại này (tìm kiếm tương đối vì it.genre có thể chứa nhiều genre)
+                songList.count { it.genre?.contains(genreName, ignoreCase = true) == true }
+            }
+            listOf("All") + sortedGenres
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("All"))
 
     private val _selectedGenre = MutableStateFlow("All")
     val selectedGenre: StateFlow<String> = _selectedGenre
@@ -50,6 +65,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _username = MutableStateFlow("User")
     val username: StateFlow<String> = _username
+
+    private val _artists = MutableStateFlow<List<Artist>>(emptyList())
+    val artists: StateFlow<List<Artist>> = _artists
+
+    private val _artistSongs = MutableStateFlow<List<Song>>(emptyList())
+    val artistSongs: StateFlow<List<Song>> = _artistSongs
 
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong
@@ -89,6 +110,35 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         fetchSongs()
         fetchTopWeekly()
         fetchGenres()
+        fetchArtists()
+    }
+
+    private fun fetchArtists() {
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.api.getArtists()
+                if (response.isSuccessful) {
+                    val artistList = response.body() ?: emptyList()
+                    // Sắp xếp nghệ sĩ phổ biến (nhiều người quan tâm nhất lên đầu)
+                    _artists.value = artistList.sortedByDescending { it.followers_count }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Error fetching artists", e)
+            }
+        }
+    }
+
+    fun fetchArtistSongs(artistId: Int) {
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.api.getArtistSongs(artistId)
+                if (response.isSuccessful) {
+                    _artistSongs.value = response.body() ?: emptyList()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Error fetching artist songs", e)
+            }
+        }
     }
 
     private fun fetchGenres() {
@@ -97,7 +147,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 val response = RetrofitClient.api.getGenres()
                 if (response.isSuccessful) {
                     val genreList = response.body()?.map { it.name } ?: emptyList()
-                    _genres.value = listOf("All") + genreList
+                    _rawGenres.value = genreList
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MusicViewModel", "Error fetching genres", e)

@@ -71,6 +71,18 @@ class MainActivity : ComponentActivity() {
                 composable("profile") {
                     ProfileScreen(navController)
                 }
+
+                composable("artists") {
+                    ArtistsScreen(navController, musicViewModel)
+                }
+
+                composable(
+                    "artist_detail/{artistId}",
+                    arguments = listOf(navArgument("artistId") { type = NavType.IntType })
+                ) { backStackEntry ->
+                    val artistId = backStackEntry.arguments?.getInt("artistId") ?: 0
+                    ArtistDetailScreen(navController, artistId, musicViewModel)
+                }
             }
         }
     }

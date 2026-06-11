@@ -14,6 +14,7 @@ data class Song(
     @SerializedName("image_url") val image_url: String? = null,
     @SerializedName("genre") val genre: String? = null,
     @SerializedName("duration") val duration: Int? = null,
+    @SerializedName("release_date") val releaseDate: String? = null,
     @SerializedName("views") val views: Int = 0,
     @SerializedName("likes_count") val likes_count: Int = 0,
     @SerializedName("is_public") val isPublic: Boolean = true
@@ -25,21 +26,43 @@ data class Song(
 
     fun getFullImageUrl(): String? {
         if (image_url == null) return null
-        return if (image_url.startsWith("http")) image_url else RetrofitClient.BASE_URL + image_url
+        
+        // Nếu là link tuyệt đối, lấy phần sau port 5000 để dùng với IP hiện tại
+        val path = if (image_url.startsWith("http")) {
+            image_url.substringAfter(":5000/")
+        } else {
+            image_url
+        }
+        
+        return RetrofitClient.BASE_URL + path.removePrefix("/")
     }
 }
 
 @Immutable
 data class Artist(
-    val id: Int,
-    val stage_name: String,
-    val avatar_url: String? = null,
-    val followers_count: Int = 0,
-    val is_verified: Boolean = false
+    @SerializedName("id") val id: Int,
+    @SerializedName("stage_name") val stage_name: String,
+    @SerializedName("avatar_url") val avatar_url: String? = null,
+    @SerializedName("followers_count") val followers_count: Int = 0,
+    @SerializedName("is_verified") val is_verified: Boolean = false
 ) {
     fun getFullAvatarUrl(): String? {
         if (avatar_url == null) return null
-        return if (avatar_url.startsWith("http")) avatar_url else RetrofitClient.BASE_URL + avatar_url
+        
+        // Xử lý nếu avatar_url là link tuyệt đối nhưng sai IP
+        var path = if (avatar_url.startsWith("http")) {
+            avatar_url.substringAfter(":5000/")
+        } else {
+            avatar_url
+        }
+        
+        // Sửa lỗi đường dẫn: Nếu file nằm ở uploads/ nhưng DB lưu uploads/images/
+        // Dựa trên ảnh VS Code của người dùng, ảnh nghệ sĩ nằm ở uploads/ trực tiếp
+        if (path.startsWith("uploads/images/17811")) {
+            path = path.replace("uploads/images/", "uploads/")
+        }
+
+        return if (path.startsWith("http")) path else RetrofitClient.BASE_URL + path.removePrefix("/")
     }
 }
 
@@ -54,6 +77,19 @@ data class Playlist(
 ) {
     val realSongsCount: Int
         get() = if (songsCount > 0) songsCount else songCountFallback
+
+    fun getFullImageUrl(): String? {
+        if (image_url == null) return null
+        
+        // Nếu là link tuyệt đối, lấy phần sau port 5000 để dùng với IP hiện tại
+        val path = if (image_url.startsWith("http")) {
+            image_url.substringAfter(":5000/")
+        } else {
+            image_url
+        }
+        
+        return RetrofitClient.BASE_URL + path.removePrefix("/")
+    }
 }
 
 data class CreatePlaylistRequest(

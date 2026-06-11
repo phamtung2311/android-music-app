@@ -47,20 +47,13 @@ fun HomeScreen(
     val isPlaying by musicViewModel.isPlaying.collectAsState()
     val selectedGenre by musicViewModel.selectedGenre.collectAsState()
     val genres by musicViewModel.genres.collectAsState()
+    val artists by musicViewModel.artists.collectAsState()
 
     var selectedItem by remember { mutableIntStateOf(0) }
     var songToAddToPlaylist by remember { mutableStateOf<Song?>(null) }
     
     val items = remember { listOf("Home", "Search", "Library", "Premium") }
     val icons = remember { listOf(Icons.Filled.Home, Icons.Filled.Search, Icons.Filled.LibraryMusic, Icons.Filled.WorkspacePremium) }
-
-    val artists = remember {
-        listOf(
-            Artist(1, "Tùng Music", "https://picsum.photos/200"),
-            Artist(2, "Sơn Tùng M-TP", "https://picsum.photos/201"),
-            Artist(3, "Đen Vâu", "https://picsum.photos/202")
-        )
-    }
 
     Scaffold(
         topBar = {
@@ -159,10 +152,25 @@ fun HomeScreen(
 
                 item {
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text(text = "Nghệ sĩ phổ biến", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "Nghệ sĩ phổ biến", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "Xem tất cả",
+                            color = Color(0xFF1DB954),
+                            modifier = Modifier.clickable { navController.navigate("artists") }
+                        )
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(artists, key = { it.id }) { artist -> ArtistItem(artist) }
+                        items(artists, key = { it.id }) { artist ->
+                            ArtistItem(artist) {
+                                navController.navigate("artist_detail/${artist.id}")
+                            }
+                        }
                     }
                 }
 
@@ -232,9 +240,35 @@ fun SongCard(song: Song, onClick: () -> Unit) {
 }
 
 @Composable
-fun ArtistItem(artist: Artist) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(120.dp)) {
-        AsyncImage(model = artist.getFullAvatarUrl(), contentDescription = artist.stage_name, modifier = Modifier.size(120.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+fun ArtistItem(artist: Artist, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(120.dp).clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .clip(CircleShape)
+                .background(Color.DarkGray),
+            contentAlignment = Alignment.Center
+        ) {
+            val imageUrl = artist.getFullAvatarUrl()
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = artist.stage_name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = Color.Gray,
+                    modifier = Modifier.size(64.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = artist.stage_name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }

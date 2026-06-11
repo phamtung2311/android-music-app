@@ -48,6 +48,12 @@ interface ApiService {
     @GET("genres")
     suspend fun getGenres(): Response<List<Genre>>
 
+    @GET("api/artists")
+    suspend fun getArtists(): Response<List<Artist>>
+
+    @GET("api/artists/{id}/songs")
+    suspend fun getArtistSongs(@Path("id") artistId: Int): Response<List<Song>>
+
     // API Kiểm tra trạng thái
     @GET("songs/{id}/check-favorite")
     suspend fun checkFavoriteStatus(

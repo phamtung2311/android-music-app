@@ -214,7 +214,7 @@ fun PlaylistItem(
             ) {
                 if (playlist.image_url != null) {
                     AsyncImage(
-                        model = playlist.image_url,
+                        model = playlist.getFullImageUrl(),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
