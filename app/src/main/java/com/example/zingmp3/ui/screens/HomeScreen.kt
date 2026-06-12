@@ -44,7 +44,7 @@ fun HomeScreen(
     val songs by musicViewModel.songs.collectAsState()
     val recommendedSongs by musicViewModel.recommendedSongs.collectAsState()
     val recommendedArtists by musicViewModel.recommendedArtists.collectAsState()
-    val top10Songs by musicViewModel.top10WeeklySongs.collectAsState()
+    val top20Songs by musicViewModel.top20WeeklySongs.collectAsState()
     val currentSong by musicViewModel.currentSong.collectAsState()
     val isPlaying by musicViewModel.isPlaying.collectAsState()
     val selectedGenre by musicViewModel.selectedGenre.collectAsState()
@@ -60,7 +60,13 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable {
+                            selectedItem = 0
+                            musicViewModel.setGenre("All")
+                        }
+                    ) {
                         Icon(Icons.Filled.LibraryMusic, null, tint = Color(0xFF1DB954), modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(text = "Muzic", fontWeight = FontWeight.Bold, fontSize = 24.sp)
@@ -80,7 +86,10 @@ fun HomeScreen(
                         song = song, 
                         isPlaying = isPlaying, 
                         onTogglePlay = musicViewModel::togglePlayPause, 
-                        onClick = { navController.navigate("player") }
+                        onClick = { navController.navigate("player") },
+                        onArtistClick = { artistId ->
+                            navController.navigate("artist_detail/$artistId")
+                        }
                     )
                 }
                 NavigationBar(containerColor = Color.Black, contentColor = Color.White) {
@@ -122,54 +131,84 @@ fun HomeScreen(
                     }
                 }
 
-                // Section: BXH Top 10 Weekly
-                if (top10Songs.isNotEmpty()) {
+                // Section: BXH Top 20 Weekly
+                if (selectedGenre == "All" && top20Songs.isNotEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(text = "BXH Nhạc Mới (Tuần này)", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(16.dp))
-                    }
-                    itemsIndexed(top10Songs, key = { _, song -> "top_${song.id}" }) { index, song ->
-                        RankingItem(index + 1, song, onClick = {
-                            musicViewModel.playSong(song)
-                            navController.navigate("player")
-                        }, onMoreClick = { songToAddToPlaylist = song })
-                    }
-                }
 
-                item {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(text = "Gợi ý cho $username", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(recommendedSongs, key = { it.id }) { song ->
-                            SongCard(song, onClick = { 
-                                musicViewModel.playSong(song)
-                                navController.navigate("player")
-                            })
+                        // Khung cuộn riêng cho BXH
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(380.dp) // Chiều cao tương đương ~5 bài RankingItem
+                                .background(Color(0xFF121212), RoundedCornerShape(8.dp))
+                                .padding(8.dp)
+                        ) {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                itemsIndexed(top20Songs, key = { _, song -> "top_scroll_${song.id}" }) { index, song ->
+                                    RankingItem(
+                                        rank = index + 1, 
+                                        song = song, 
+                                        onClick = {
+                                            musicViewModel.playSong(song)
+                                            navController.navigate("player")
+                                        }, 
+                                        onMoreClick = { songToAddToPlaylist = song },
+                                        onArtistClick = { artistId ->
+                                            navController.navigate("artist_detail/$artistId")
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
 
-                item {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "Nghệ sĩ phổ biến", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = "Xem tất cả",
-                            color = Color(0xFF1DB954),
-                            modifier = Modifier.clickable { navController.navigate("artists") }
-                        )
+                if (selectedGenre == "All") {
+                    item {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(text = "Gợi ý cho $username", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            items(recommendedSongs, key = { it.id }) { song ->
+                                SongCard(
+                                    song = song, 
+                                    onClick = { 
+                                        musicViewModel.playSong(song)
+                                        navController.navigate("player")
+                                    },
+                                    onArtistClick = { artistId ->
+                                        navController.navigate("artist_detail/$artistId")
+                                    }
+                                )
+                            }
+                        }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(recommendedArtists, key = { it.id }) { artist ->
-                            ArtistItem(artist) {
-                                navController.navigate("artist_detail/${artist.id}")
+
+                    item {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = "Nghệ sĩ phổ biến", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "Xem tất cả",
+                                color = Color(0xFF1DB954),
+                                modifier = Modifier.clickable { navController.navigate("artists") }
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            items(recommendedArtists, key = { it.id }) { artist ->
+                                ArtistItem(artist) {
+                                    navController.navigate("artist_detail/${artist.id}")
+                                }
                             }
                         }
                     }
@@ -177,7 +216,12 @@ fun HomeScreen(
 
                 item {
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text(text = "Mới phát hành", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = if (selectedGenre == "All") "Mới phát hành" else "Top bài hát $selectedGenre", 
+                        color = Color.White, 
+                        fontSize = 22.sp, 
+                        fontWeight = FontWeight.Bold
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // Khung cuộn riêng cho danh sách bài hát mới
@@ -198,7 +242,10 @@ fun HomeScreen(
                                         musicViewModel.playSong(song)
                                         navController.navigate("player")
                                     },
-                                    onMoreClick = { songToAddToPlaylist = song }
+                                    onMoreClick = { songToAddToPlaylist = song },
+                                    onArtistClick = { artistId ->
+                                        navController.navigate("artist_detail/$artistId")
+                                    }
                                 )
                             }
                         }
@@ -219,7 +266,7 @@ fun HomeScreen(
 }
 
 @Composable
-fun RankingItem(rank: Int, song: Song, onClick: () -> Unit, onMoreClick: () -> Unit) {
+fun RankingItem(rank: Int, song: Song, onClick: () -> Unit, onMoreClick: () -> Unit, onArtistClick: (Int) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clickable { onClick() },
         verticalAlignment = Alignment.CenterVertically
@@ -240,7 +287,12 @@ fun RankingItem(rank: Int, song: Song, onClick: () -> Unit, onMoreClick: () -> U
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(text = song.title ?: "Unknown Title", color = Color.White, fontWeight = FontWeight.Medium, maxLines = 1)
-            Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp)
+            Text(
+                text = song.artist_name ?: "Unknown", 
+                color = Color.Gray, 
+                fontSize = 12.sp,
+                modifier = Modifier.clickable { song.artist_id?.let { onArtistClick(it) } }
+            )
         }
         Text(text = "${song.views} views", color = Color.DarkGray, fontSize = 11.sp)
         IconButton(onClick = onMoreClick) { Icon(Icons.Filled.MoreVert, null, tint = Color.Gray) }
@@ -248,12 +300,18 @@ fun RankingItem(rank: Int, song: Song, onClick: () -> Unit, onMoreClick: () -> U
 }
 
 @Composable
-fun SongCard(song: Song, onClick: () -> Unit) {
+fun SongCard(song: Song, onClick: () -> Unit, onArtistClick: (Int) -> Unit) {
     Column(modifier = Modifier.width(150.dp).clickable { onClick() }) {
         AsyncImage(model = song.getFullImageUrl(), contentDescription = song.title ?: "Song Cover", modifier = Modifier.size(150.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = song.title ?: "Unknown Title", color = Color.White, maxLines = 1, fontWeight = FontWeight.SemiBold)
-        Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp, maxLines = 1)
+        Text(
+            text = song.artist_name ?: "Unknown", 
+            color = Color.Gray, 
+            fontSize = 12.sp, 
+            maxLines = 1,
+            modifier = Modifier.clickable { song.artist_id?.let { onArtistClick(it) } }
+        )
     }
 }
 
@@ -286,34 +344,75 @@ fun ArtistItem(artist: Artist, onClick: () -> Unit) {
                     modifier = Modifier.size(64.dp)
                 )
             }
+
+            // Nhãn hiển thị số người quan tâm
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 4.dp)
+                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.Favorite,
+                        contentDescription = null,
+                        tint = Color(0xFF1DB954),
+                        modifier = Modifier.size(10.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    val followerText = when {
+                        artist.followers_count >= 1000000 -> String.format("%.1fM", artist.followers_count / 1000000f)
+                        artist.followers_count >= 1000 -> String.format("%.1fK", artist.followers_count / 1000f)
+                        else -> artist.followers_count.toString()
+                    }
+                    Text(
+                        text = followerText,
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text(text = artist.stage_name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text(text = artist.stage_name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }
 
 @Composable
-fun SongListItem(song: Song, onClick: () -> Unit, onMoreClick: () -> Unit) {
+fun SongListItem(song: Song, onClick: () -> Unit, onMoreClick: () -> Unit, onArtistClick: (Int) -> Unit = {}) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clickable { onClick() }, verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(model = song.getFullImageUrl(), contentDescription = song.title ?: "Song Cover", modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(text = song.title ?: "Unknown Title", color = Color.White, fontWeight = FontWeight.Medium)
-            Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp)
+            Text(
+                text = song.artist_name ?: "Unknown", 
+                color = Color.Gray, 
+                fontSize = 12.sp,
+                modifier = Modifier.clickable { song.artist_id?.let { onArtistClick(it) } }
+            )
         }
         IconButton(onClick = onMoreClick) { Icon(Icons.Filled.MoreVert, null, tint = Color.Gray) }
     }
 }
 
 @Composable
-fun NowPlayingBar(song: Song, isPlaying: Boolean, onTogglePlay: () -> Unit, onClick: () -> Unit) {
+fun NowPlayingBar(song: Song, isPlaying: Boolean, onTogglePlay: () -> Unit, onClick: () -> Unit, onArtistClick: (Int) -> Unit) {
     Surface(color = Color(0xFF282828), modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp, vertical = 4.dp).clip(RoundedCornerShape(8.dp)).clickable { onClick() }) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp)) {
             AsyncImage(model = song.getFullImageUrl(), contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = song.title ?: "Unknown Title", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                Text(text = song.artist_name ?: "Unknown", color = Color.Gray, fontSize = 12.sp, maxLines = 1)
+                Text(
+                    text = song.artist_name ?: "Unknown", 
+                    color = Color.Gray, 
+                    fontSize = 12.sp, 
+                    maxLines = 1,
+                    modifier = Modifier.clickable { song.artist_id?.let { onArtistClick(it) } }
+                )
             }
             IconButton(onClick = onTogglePlay) { Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White) }
         }

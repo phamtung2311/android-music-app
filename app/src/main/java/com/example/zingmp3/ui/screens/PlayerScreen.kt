@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -71,7 +72,15 @@ fun PlayerScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            SongInfo(title = song.title ?: "Unknown Title", artist = song.artist_name ?: "Unknown Artist")
+            SongInfo(
+                title = song.title ?: "Unknown Title", 
+                artist = song.artist_name ?: "Unknown Artist",
+                onArtistClick = {
+                    song.artist_id?.let { id ->
+                        navController.navigate("artist_detail/$id")
+                    }
+                }
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -243,10 +252,16 @@ fun PlayerHeader(onBack: () -> Unit, onAddFavorite: () -> Unit, onAddToPlaylist:
 }
 
 @Composable
-fun SongInfo(title: String, artist: String) {
+fun SongInfo(title: String, artist: String, onArtistClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(text = title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-        Text(text = artist, color = Color(0xFF1DB954), fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        Text(
+            text = artist, 
+            color = Color(0xFF1DB954), 
+            fontSize = 16.sp, 
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.clickable { onArtistClick() }
+        )
     }
 }
 

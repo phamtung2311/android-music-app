@@ -41,6 +41,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isBuffering = MutableStateFlow(false)
     private val _isCurrentLiked = MutableStateFlow(false)
     private val _isArtistFollowed = MutableStateFlow(false)
+    private val _followedArtistIds = MutableStateFlow<Set<Int>>(loadFollowedArtistIds())
     private val _historyIds = MutableStateFlow<List<Int>>(loadHistory())
 
     // --- Public StateFlows ---
@@ -59,13 +60,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val songs: StateFlow<List<Song>> = _songs
         .combine(_selectedGenre) { songList, genre ->
             if (genre == "All") songList
-            else songList.filter { it.genre?.contains(genre, ignoreCase = true) == true }
+            else songList
+                .filter { it.genre?.contains(genre, ignoreCase = true) == true }
+                .sortedByDescending { it.views }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val topWeeklySongs: StateFlow<List<Song>> = _topWeeklySongs
-    val top10WeeklySongs: StateFlow<List<Song>> = _topWeeklySongs
-        .map { it.take(10) }
+    val top20WeeklySongs: StateFlow<List<Song>> = _topWeeklySongs
+        .map { it.take(20) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val username: StateFlow<String> = _username
@@ -78,6 +81,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val isBuffering: StateFlow<Boolean> = _isBuffering
     val isCurrentLiked: StateFlow<Boolean> = _isCurrentLiked
     val isArtistFollowed: StateFlow<Boolean> = _isArtistFollowed
+    val followedArtists: StateFlow<List<Artist>> = combine(_artists, _followedArtistIds) { allArtists, followedIds ->
+        allArtists.filter { it.id in followedIds }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Recommendation logic
     val recommendedSongs: StateFlow<List<Song>> = combine(_songs, _historyIds) { allSongs, historyIds ->
@@ -105,16 +111,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val recommendedArtists: StateFlow<List<Artist>> = combine(_artists, _historyIds, _songs) { allArtists, historyIds, allSongs ->
-        if (historyIds.isEmpty()) return@combine allArtists
-        
-        val historyArtistIds = historyIds.mapNotNull { id -> allSongs.find { it.id == id }?.artist_id }.toSet()
-        
-        val historicalArtists = allArtists.filter { it.id in historyArtistIds }
-        val otherArtists = allArtists.filter { it.id !in historyArtistIds }
-        
-        historicalArtists + otherArtists
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val recommendedArtists: StateFlow<List<Artist>> = _artists
+        .map { it.sortedByDescending { artist -> artist.followers_count } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private var exoPlayer: ExoPlayer? = null
     private var currentPlayQueue: List<Song> = emptyList()
@@ -134,6 +133,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadHistory(): List<Int> {
         val historyStr = sharedPref.getString("listening_history", "") ?: ""
         return if (historyStr.isEmpty()) emptyList() else historyStr.split(",").mapNotNull { it.toIntOrNull() }
+    }
+
+    private fun loadFollowedArtistIds(): Set<Int> {
+        val idsStr = sharedPref.getString("followed_artist_ids", "") ?: ""
+        return if (idsStr.isEmpty()) emptySet() else idsStr.split(",").mapNotNull { it.toIntOrNull() }.toSet()
+    }
+
+    private fun saveFollowedArtistIds(ids: Set<Int>) {
+        sharedPref.edit().putString("followed_artist_ids", ids.joinToString(",")).apply()
     }
 
     private fun saveHistory(ids: List<Int>) {
@@ -169,9 +177,41 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 if (response.isSuccessful) {
                     val artistList = response.body() ?: emptyList()
                     _artists.value = artistList.sortedByDescending { it.followers_count }
+                    
+                    // Tự động đồng bộ trạng thái quan tâm cho những nghệ sĩ mới tải về
+                    syncFollowedStatus(artistList)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MusicViewModel", "Error fetching artists", e)
+            }
+        }
+    }
+
+    private fun syncFollowedStatus(artistList: List<Artist>) {
+        val userId = getUserId()
+        if (userId == -1) return
+        
+        viewModelScope.launch {
+            val currentIds = _followedArtistIds.value.toMutableSet()
+            var changed = false
+            
+            artistList.forEach { artist ->
+                try {
+                    val response = RetrofitClient.api.checkFollowStatus(artist.id, userId)
+                    if (response.isSuccessful) {
+                        val isFollowing = response.body()?.get("isFollowing") as? Boolean ?: false
+                        if (isFollowing) {
+                            if (currentIds.add(artist.id)) changed = true
+                        } else {
+                            if (currentIds.remove(artist.id)) changed = true
+                        }
+                    }
+                } catch (e: Exception) { }
+            }
+            
+            if (changed) {
+                _followedArtistIds.value = currentIds
+                saveFollowedArtistIds(currentIds)
             }
         }
     }
@@ -379,7 +419,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 val response = RetrofitClient.api.checkFollowStatus(artistId, userId)
                 if (response.isSuccessful) {
                     val body = response.body()
-                    _isArtistFollowed.value = body?.get("isFollowing") as? Boolean ?: false
+                    val isFollowing = body?.get("isFollowing") as? Boolean ?: false
+                    _isArtistFollowed.value = isFollowing
+                    
+                    // Sync local list
+                    val currentIds = _followedArtistIds.value.toMutableSet()
+                    if (isFollowing) currentIds.add(artistId) else currentIds.remove(artistId)
+                    if (currentIds != _followedArtistIds.value) {
+                        _followedArtistIds.value = currentIds
+                        saveFollowedArtistIds(currentIds)
+                    }
                 }
             } catch (e: Exception) {
                 _isArtistFollowed.value = false
@@ -395,7 +444,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 val response = RetrofitClient.api.followArtist(artistId, userId)
                 if (response.isSuccessful) {
                     val body = response.body()
-                    _isArtistFollowed.value = body?.get("isFollowing") as? Boolean ?: false
+                    val isFollowing = body?.get("isFollowing") as? Boolean ?: false
+                    _isArtistFollowed.value = isFollowing
+                    
+                    // Update local list
+                    val currentIds = _followedArtistIds.value.toMutableSet()
+                    if (isFollowing) currentIds.add(artistId) else currentIds.remove(artistId)
+                    _followedArtistIds.value = currentIds
+                    saveFollowedArtistIds(currentIds)
+                    
                     fetchArtists() 
                 }
             } catch (e: Exception) {
