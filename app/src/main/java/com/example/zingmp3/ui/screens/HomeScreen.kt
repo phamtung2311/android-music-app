@@ -42,12 +42,13 @@ fun HomeScreen(
     val username by musicViewModel.username.collectAsState()
 
     val songs by musicViewModel.songs.collectAsState()
+    val recommendedSongs by musicViewModel.recommendedSongs.collectAsState()
+    val recommendedArtists by musicViewModel.recommendedArtists.collectAsState()
     val top10Songs by musicViewModel.top10WeeklySongs.collectAsState()
     val currentSong by musicViewModel.currentSong.collectAsState()
     val isPlaying by musicViewModel.isPlaying.collectAsState()
     val selectedGenre by musicViewModel.selectedGenre.collectAsState()
     val genres by musicViewModel.genres.collectAsState()
-    val artists by musicViewModel.artists.collectAsState()
 
     var selectedItem by remember { mutableIntStateOf(0) }
     var songToAddToPlaylist by remember { mutableStateOf<Song?>(null) }
@@ -141,7 +142,7 @@ fun HomeScreen(
                     Text(text = "Gợi ý cho $username", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(16.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(songs, key = { it.id }) { song ->
+                        items(recommendedSongs, key = { it.id }) { song ->
                             SongCard(song, onClick = { 
                                 musicViewModel.playSong(song)
                                 navController.navigate("player")
@@ -166,7 +167,7 @@ fun HomeScreen(
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(artists, key = { it.id }) { artist ->
+                        items(recommendedArtists, key = { it.id }) { artist ->
                             ArtistItem(artist) {
                                 navController.navigate("artist_detail/${artist.id}")
                             }
@@ -178,13 +179,30 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(24.dp))
                     Text(text = "Mới phát hành", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(16.dp))
-                }
 
-                items(songs, key = { "recent_${it.id}" }) { song ->
-                    SongListItem(song, onClick = { 
-                        musicViewModel.playSong(song)
-                        navController.navigate("player")
-                    }, onMoreClick = { songToAddToPlaylist = song })
+                    // Khung cuộn riêng cho danh sách bài hát mới
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(400.dp) // Chiều cao cố định tương đương ~5 bài hát
+                            .background(Color(0xFF121212), RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                    ) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(songs, key = { "recent_scroll_${it.id}" }) { song ->
+                                SongListItem(
+                                    song = song,
+                                    onClick = {
+                                        musicViewModel.playSong(song)
+                                        navController.navigate("player")
+                                    },
+                                    onMoreClick = { songToAddToPlaylist = song }
+                                )
+                            }
+                        }
+                    }
                 }
                 item { Spacer(modifier = Modifier.height(24.dp)) }
             }

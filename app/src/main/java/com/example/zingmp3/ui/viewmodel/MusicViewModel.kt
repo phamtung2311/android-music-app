@@ -24,25 +24,36 @@ import kotlinx.coroutines.launch
 
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val sharedPref = application.getSharedPreferences("USER_DATA", android.content.Context.MODE_PRIVATE)
+
+    // --- Private StateFlows ---
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
     private val _rawGenres = MutableStateFlow<List<String>>(emptyList())
+    private val _selectedGenre = MutableStateFlow("All")
+    private val _topWeeklySongs = MutableStateFlow<List<Song>>(emptyList())
+    private val _username = MutableStateFlow("User")
+    private val _artists = MutableStateFlow<List<Artist>>(emptyList())
+    private val _artistSongs = MutableStateFlow<List<Song>>(emptyList())
+    private val _currentSong = MutableStateFlow<Song?>(null)
+    private val _isPlaying = MutableStateFlow(false)
+    private val _currentPosition = MutableStateFlow(0L)
+    private val _duration = MutableStateFlow(0L)
+    private val _isBuffering = MutableStateFlow(false)
+    private val _isCurrentLiked = MutableStateFlow(false)
+    private val _isArtistFollowed = MutableStateFlow(false)
+    private val _historyIds = MutableStateFlow<List<Int>>(loadHistory())
 
+    // --- Public StateFlows ---
     val genres: StateFlow<List<String>> = combine(_songs, _rawGenres) { songList, rawGenres ->
         if (rawGenres.isEmpty()) listOf("All")
         else {
-            // Đếm số lượng bài hát cho mỗi thể loại
-            val genreCounts = songList.groupingBy { it.genre ?: "Unknown" }.eachCount()
-            
-            // Sắp xếp các thể loại từ server dựa trên số lượng bài hát (nhiều nhất lên đầu)
             val sortedGenres = rawGenres.sortedByDescending { genreName ->
-                // Tìm số lượng bài hát của thể loại này (tìm kiếm tương đối vì it.genre có thể chứa nhiều genre)
                 songList.count { it.genre?.contains(genreName, ignoreCase = true) == true }
             }
             listOf("All") + sortedGenres
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("All"))
 
-    private val _selectedGenre = MutableStateFlow("All")
     val selectedGenre: StateFlow<String> = _selectedGenre
 
     val songs: StateFlow<List<Song>> = _songs
@@ -52,50 +63,61 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun setGenre(genre: String) {
-        _selectedGenre.value = genre
-    }
-
-    private val _topWeeklySongs = MutableStateFlow<List<Song>>(emptyList())
     val topWeeklySongs: StateFlow<List<Song>> = _topWeeklySongs
-
     val top10WeeklySongs: StateFlow<List<Song>> = _topWeeklySongs
         .map { it.take(10) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _username = MutableStateFlow("User")
     val username: StateFlow<String> = _username
-
-    private val _artists = MutableStateFlow<List<Artist>>(emptyList())
     val artists: StateFlow<List<Artist>> = _artists
-
-    private val _artistSongs = MutableStateFlow<List<Song>>(emptyList())
     val artistSongs: StateFlow<List<Song>> = _artistSongs
-
-    private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong
-
-    private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying
-
-    private val _currentPosition = MutableStateFlow(0L)
     val currentPosition: StateFlow<Long> = _currentPosition
-
-    private val _duration = MutableStateFlow(0L)
     val duration: StateFlow<Long> = _duration
-
-    private val _isBuffering = MutableStateFlow(false)
     val isBuffering: StateFlow<Boolean> = _isBuffering
-
-    private val _isCurrentLiked = MutableStateFlow(false)
     val isCurrentLiked: StateFlow<Boolean> = _isCurrentLiked
-
-    private val _isArtistFollowed = MutableStateFlow(false)
     val isArtistFollowed: StateFlow<Boolean> = _isArtistFollowed
+
+    // Recommendation logic
+    val recommendedSongs: StateFlow<List<Song>> = combine(_songs, _historyIds) { allSongs, historyIds ->
+        if (allSongs.isEmpty()) return@combine emptyList()
+        if (historyIds.isEmpty()) return@combine allSongs.shuffled().take(20)
+
+        val historySongs = historyIds.mapNotNull { id -> allSongs.find { it.id == id } }
+        val recent5 = historySongs.take(5)
+        
+        val historyGenres = historySongs.flatMap { it.genre?.split(",")?.map { g -> g.trim() } ?: emptyList() }.toSet()
+        val historyArtistIds = historySongs.mapNotNull { it.artist_id }.toSet()
+
+        val relatedByArtist = allSongs.filter { it.artist_id in historyArtistIds && it.id !in historyIds }
+        val relatedByGenre = allSongs.filter { song -> 
+            val songGenres = song.genre?.split(",")?.map { it.trim() } ?: emptyList()
+            songGenres.any { it in historyGenres } && song.id !in historyIds 
+        }
+
+        val combined = (recent5 + (relatedByArtist + relatedByGenre).distinct().shuffled()).take(20)
+        
+        if (combined.size < 10 && allSongs.size > combined.size) {
+            (combined + (allSongs - combined.toSet()).shuffled()).take(20)
+        } else {
+            combined
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val recommendedArtists: StateFlow<List<Artist>> = combine(_artists, _historyIds, _songs) { allArtists, historyIds, allSongs ->
+        if (historyIds.isEmpty()) return@combine allArtists
+        
+        val historyArtistIds = historyIds.mapNotNull { id -> allSongs.find { it.id == id }?.artist_id }.toSet()
+        
+        val historicalArtists = allArtists.filter { it.id in historyArtistIds }
+        val otherArtists = allArtists.filter { it.id !in historyArtistIds }
+        
+        historicalArtists + otherArtists
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private var exoPlayer: ExoPlayer? = null
     private var currentPlayQueue: List<Song> = emptyList()
-    private val sharedPref = application.getSharedPreferences("USER_DATA", android.content.Context.MODE_PRIVATE)
     private var statsJob: Job? = null
 
     init {
@@ -107,6 +129,30 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadUsername() {
         _username.value = sharedPref.getString("username", "User") ?: "User"
+    }
+
+    private fun loadHistory(): List<Int> {
+        val historyStr = sharedPref.getString("listening_history", "") ?: ""
+        return if (historyStr.isEmpty()) emptyList() else historyStr.split(",").mapNotNull { it.toIntOrNull() }
+    }
+
+    private fun saveHistory(ids: List<Int>) {
+        sharedPref.edit().putString("listening_history", ids.joinToString(",")).apply()
+    }
+
+    private fun addToHistory(songId: Int) {
+        val currentHistory = _historyIds.value.toMutableList()
+        currentHistory.remove(songId)
+        currentHistory.add(0, songId)
+        if (currentHistory.size > 50) {
+            currentHistory.removeAt(currentHistory.size - 1)
+        }
+        _historyIds.value = currentHistory
+        saveHistory(currentHistory)
+    }
+
+    fun setGenre(genre: String) {
+        _selectedGenre.value = genre
     }
 
     fun refreshData() {
@@ -122,7 +168,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 val response = RetrofitClient.api.getArtists()
                 if (response.isSuccessful) {
                     val artistList = response.body() ?: emptyList()
-                    // Sắp xếp nghệ sĩ phổ biến (nhiều người quan tâm nhất lên đầu)
                     _artists.value = artistList.sortedByDescending { it.followers_count }
                 }
             } catch (e: Exception) {
@@ -183,6 +228,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         if (index >= 0 && index < currentPlayQueue.size) {
                             val song = currentPlayQueue[index]
                             _currentSong.value = song
+                            addToHistory(song.id)
                             
                             val userId = getUserId()
                             if (userId != -1) {
@@ -271,8 +317,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun playSong(song: Song) {
         currentPlayQueue = listOf(song)
         _currentSong.value = song
+        addToHistory(song.id)
         
-        // Reset trạng thái cũ và kiểm tra ngay lập tức
         val userId = getUserId()
         if (userId != -1) {
             checkLikeStatus(song.id, userId)
@@ -280,10 +326,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             _isCurrentLiked.value = false
         }
         
-        // Hủy job thống kê cũ
         statsJob?.cancel()
         statsJob = viewModelScope.launch {
-            delay(2000) // Sau khi nghe được 2s mới tính là 1 view
+            delay(2000) 
             recordView(song.id)
         }
 
@@ -351,7 +396,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 if (response.isSuccessful) {
                     val body = response.body()
                     _isArtistFollowed.value = body?.get("isFollowing") as? Boolean ?: false
-                    fetchArtists() // Refresh to update follower count
+                    fetchArtists() 
                 }
             } catch (e: Exception) {
                 // handle error
@@ -365,7 +410,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 val response = RetrofitClient.api.checkFavoriteStatus(songId, userId)
                 if (response.isSuccessful) {
                     val body = response.body()
-                    // Backend trả về { isFavorite: true/false }
                     val isFav = body?.get("isFavorite") as? Boolean ?: false
                     _isCurrentLiked.value = isFav
                 }
@@ -401,7 +445,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                                     ?: !_isCurrentLiked.value
                     
                     _isCurrentLiked.value = isLikedNow
-                    fetchSongs() // Cập nhật lại số lượng Like hiển thị
+                    fetchSongs()
                 } else {
                     onError("Lỗi máy chủ (${response.code()})")
                 }
