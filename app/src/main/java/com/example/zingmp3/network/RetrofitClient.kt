@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 object RetrofitClient {
 
     // Quay lại dùng IP trực tiếp vì .local không được hỗ trợ trên thiết bị/mạng này
-    const val BASE_URL = "http://192.168.1.39:5000/"
+    const val BASE_URL = "http://192.168.1.4:5000/"
     // Hoặc nếu Android của bạn đời mới, hãy thử: "http://tung-ThinkPad-X1-Carbon-6th.local:5000/"
 
     private val logging = HttpLoggingInterceptor().apply {

@@ -43,6 +43,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isArtistFollowed = MutableStateFlow(false)
     private val _followedArtistIds = MutableStateFlow<Set<Int>>(loadFollowedArtistIds())
     private val _historyIds = MutableStateFlow<List<Int>>(loadHistory())
+    private val _searchQuery = MutableStateFlow("")
+    private val _searchHistory = MutableStateFlow<List<String>>(loadSearchHistory())
 
     // --- Public StateFlows ---
     val genres: StateFlow<List<String>> = combine(_songs, _rawGenres) { songList, rawGenres ->
@@ -81,6 +83,22 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val isBuffering: StateFlow<Boolean> = _isBuffering
     val isCurrentLiked: StateFlow<Boolean> = _isCurrentLiked
     val isArtistFollowed: StateFlow<Boolean> = _isArtistFollowed
+    val searchQuery: StateFlow<String> = _searchQuery
+    val searchHistory: StateFlow<List<String>> = _searchHistory
+
+    val searchResultsSongs: StateFlow<List<Song>> = combine(_songs, _searchQuery) { songList, query ->
+        if (query.isBlank()) emptyList()
+        else songList.filter { 
+            it.title?.contains(query, ignoreCase = true) == true || 
+            it.artist_name?.contains(query, ignoreCase = true) == true 
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val searchResultsArtists: StateFlow<List<Artist>> = combine(_artists, _searchQuery) { artistList, query ->
+        if (query.isBlank()) emptyList()
+        else artistList.filter { it.stage_name.contains(query, ignoreCase = true) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val followedArtists: StateFlow<List<Artist>> = combine(_artists, _followedArtistIds) { allArtists, followedIds ->
         allArtists.filter { it.id in followedIds }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -140,6 +158,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         return if (idsStr.isEmpty()) emptySet() else idsStr.split(",").mapNotNull { it.toIntOrNull() }.toSet()
     }
 
+    private fun loadSearchHistory(): List<String> {
+        val historyStr = sharedPref.getString("search_history", "") ?: ""
+        return if (historyStr.isEmpty()) emptyList() else historyStr.split("|")
+    }
+
+    private fun saveSearchHistory(history: List<String>) {
+        sharedPref.edit().putString("search_history", history.joinToString("|")).apply()
+    }
+
     private fun saveFollowedArtistIds(ids: Set<Int>) {
         sharedPref.edit().putString("followed_artist_ids", ids.joinToString(",")).apply()
     }
@@ -161,6 +188,31 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setGenre(genre: String) {
         _selectedGenre.value = genre
+    }
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun addToSearchHistory(query: String) {
+        if (query.isBlank()) return
+        val currentHistory = _searchHistory.value.toMutableList()
+        currentHistory.remove(query)
+        currentHistory.add(0, query)
+        val newHistory = currentHistory.take(8)
+        _searchHistory.value = newHistory
+        saveSearchHistory(newHistory)
+    }
+
+    fun removeFromSearchHistory(query: String) {
+        val newHistory = _searchHistory.value.filter { it != query }
+        _searchHistory.value = newHistory
+        saveSearchHistory(newHistory)
+    }
+
+    fun clearSearchHistory() {
+        _searchHistory.value = emptyList()
+        saveSearchHistory(emptyList())
     }
 
     fun refreshData() {

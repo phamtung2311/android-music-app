@@ -107,7 +107,11 @@ fun HomeScreen(
         },
         containerColor = Color.Black
     ) { padding ->
-        if (selectedItem == 2) {
+        if (selectedItem == 1) {
+            Box(modifier = Modifier.padding(padding)) {
+                SearchScreen(navController, musicViewModel, playlistViewModel)
+            }
+        } else if (selectedItem == 2) {
             Box(modifier = Modifier.padding(padding)) {
                 LibraryScreen(navController, playlistViewModel, musicViewModel)
             }
