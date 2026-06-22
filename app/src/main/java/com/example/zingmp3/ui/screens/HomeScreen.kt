@@ -86,6 +86,7 @@ fun HomeScreen(
                         song = song, 
                         isPlaying = isPlaying, 
                         onTogglePlay = musicViewModel::togglePlayPause, 
+                        onClose = musicViewModel::stopAndClear,
                         onClick = { navController.navigate("player") },
                         onArtistClick = { artistId ->
                             navController.navigate("artist_detail/$artistId")
@@ -403,8 +404,23 @@ fun SongListItem(song: Song, onClick: () -> Unit, onMoreClick: () -> Unit, onArt
 }
 
 @Composable
-fun NowPlayingBar(song: Song, isPlaying: Boolean, onTogglePlay: () -> Unit, onClick: () -> Unit, onArtistClick: (Int) -> Unit) {
-    Surface(color = Color(0xFF282828), modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp, vertical = 4.dp).clip(RoundedCornerShape(8.dp)).clickable { onClick() }) {
+fun NowPlayingBar(
+    song: Song, 
+    isPlaying: Boolean, 
+    onTogglePlay: () -> Unit, 
+    onClose: () -> Unit,
+    onClick: () -> Unit, 
+    onArtistClick: (Int) -> Unit
+) {
+    Surface(
+        color = Color(0xFF282828), 
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp)) {
             AsyncImage(model = song.getFullImageUrl(), contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
             Spacer(modifier = Modifier.width(12.dp))
@@ -418,7 +434,12 @@ fun NowPlayingBar(song: Song, isPlaying: Boolean, onTogglePlay: () -> Unit, onCl
                     modifier = Modifier.clickable { song.artist_id?.let { onArtistClick(it) } }
                 )
             }
-            IconButton(onClick = onTogglePlay) { Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White) }
+            IconButton(onClick = onTogglePlay) { 
+                Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White) 
+            }
+            IconButton(onClick = onClose) {
+                Icon(imageVector = Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+            }
         }
     }
 }

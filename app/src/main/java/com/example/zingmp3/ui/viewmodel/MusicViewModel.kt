@@ -5,11 +5,17 @@ import androidx.annotation.OptIn
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.zingmp3.network.RetrofitClient
+import com.example.zingmp3.player.PlayerManager
+import com.example.zingmp3.service.PlaybackService
+import android.content.Intent
+import android.os.Build
+import androidx.core.content.ContextCompat
 import com.example.zingmp3.network.model.Artist
 import com.example.zingmp3.network.model.Song
 import kotlinx.coroutines.Job
@@ -134,7 +140,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private var exoPlayer: ExoPlayer? = null
-    private var currentPlayQueue: List<Song> = emptyList()
+    private var isPlayerListenerAdded = false
+    // currentPlayQueue is now in PlayerManager
     private var statsJob: Job? = null
 
     init {
@@ -142,6 +149,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         refreshData()
         updateProgress()
         loadUsername()
+        // Khởi động service ngay để chuẩn bị MediaSession
+        val intent = Intent(getApplication(), PlaybackService::class.java)
+        getApplication<Application>().startService(intent)
     }
 
     private fun loadUsername() {
@@ -299,51 +309,65 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     @OptIn(UnstableApi::class)
     private fun setupPlayer() {
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(50000, 100000, 1500, 3000)
-            .build()
+        val player = PlayerManager.getPlayer(getApplication())
+        
+        if (!isPlayerListenerAdded) {
+            player.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    _isBuffering.value = (state == Player.STATE_BUFFERING)
+                    if (state == Player.STATE_READY) {
+                        _duration.value = player.duration
+                    }
+                }
 
-        exoPlayer = ExoPlayer.Builder(getApplication())
-            .setLoadControl(loadControl)
-            .build().apply {
-                addListener(object : Player.Listener {
-                    override fun onPlaybackStateChanged(state: Int) {
-                        _isBuffering.value = (state == Player.STATE_BUFFERING)
-                        if (state == Player.STATE_READY) {
-                            _duration.value = duration
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    super.onMediaItemTransition(mediaItem, reason)
+                    val index = player.currentMediaItemIndex
+                    val queue = PlayerManager.currentPlayQueue
+                    if (index >= 0 && index < queue.size) {
+                        val song = queue[index]
+                        _currentSong.value = song
+                        addToHistory(song.id)
+                        
+                        val userId = getUserId()
+                        if (userId != -1) {
+                            checkLikeStatus(song.id, userId)
+                        }
+                        
+                        statsJob?.cancel()
+                        statsJob = viewModelScope.launch {
+                            delay(2000)
+                            recordView(song.id)
                         }
                     }
+                }
 
-                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                        super.onMediaItemTransition(mediaItem, reason)
-                        val index = currentMediaItemIndex
-                        if (index >= 0 && index < currentPlayQueue.size) {
-                            val song = currentPlayQueue[index]
-                            _currentSong.value = song
-                            addToHistory(song.id)
-                            
-                            val userId = getUserId()
-                            if (userId != -1) {
-                                checkLikeStatus(song.id, userId)
-                            }
-                            
-                            statsJob?.cancel()
-                            statsJob = viewModelScope.launch {
-                                delay(2000)
-                                recordView(song.id)
-                            }
-                        }
+                override fun onIsPlayingChanged(isPlayingNow: Boolean) {
+                    _isPlaying.value = isPlayingNow
+                    if (isPlayingNow) {
+                        ensureServiceRunning()
                     }
+                }
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    android.util.Log.e("MusicViewModel", "Player error: ${error.message}", error)
+                    _isPlaying.value = false
+                }
+            })
+            isPlayerListenerAdded = true
+        }
+        
+        exoPlayer = player
+        // mediaSession sẽ được khởi tạo bởi PlaybackService
+    }
 
-                    override fun onIsPlayingChanged(isPlayingNow: Boolean) {
-                        _isPlaying.value = isPlayingNow
-                    }
-                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                        android.util.Log.e("MusicViewModel", "Player error: ${error.message}", error)
-                        _isPlaying.value = false
-                    }
-                })
-            }
+    private fun ensureServiceRunning() {
+        val intent = Intent(getApplication(), PlaybackService::class.java)
+        // Dùng startForegroundService để báo cho Android biết đây là dịch vụ quan trọng (phát nhạc)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getApplication<Application>().startForegroundService(intent)
+        } else {
+            getApplication<Application>().startService(intent)
+        }
     }
 
     private fun updateProgress() {
@@ -406,8 +430,22 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun createMediaItem(song: Song): MediaItem {
+        val metadata = MediaMetadata.Builder()
+            .setTitle(song.title)
+            .setArtist(song.artist_name)
+            .setArtworkUri(android.net.Uri.parse(song.getFullImageUrl()))
+            .build()
+        
+        return MediaItem.Builder()
+            .setUri(song.getFullAudioUrl())
+            .setMediaId(song.id.toString())
+            .setMediaMetadata(metadata)
+            .build()
+    }
+
     fun playSong(song: Song) {
-        currentPlayQueue = listOf(song)
+        PlayerManager.currentPlayQueue = listOf(song)
         _currentSong.value = song
         addToHistory(song.id)
         
@@ -427,16 +465,17 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         exoPlayer?.let { player ->
             player.stop()
             player.clearMediaItems()
-            val mediaItem = MediaItem.fromUri(song.getFullAudioUrl())
+            val mediaItem = createMediaItem(song)
             player.setMediaItem(mediaItem)
             player.prepare()
             player.play()
+            ensureServiceRunning()
         }
     }
 
     fun playPlaylist(songs: List<Song>, startIndex: Int = 0) {
         if (songs.isEmpty()) return
-        currentPlayQueue = songs
+        PlayerManager.currentPlayQueue = songs
         
         val firstSong = songs[startIndex]
         _currentSong.value = firstSong
@@ -455,11 +494,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         exoPlayer?.let { player ->
             player.stop()
             player.clearMediaItems()
-            val mediaItems = songs.map { MediaItem.fromUri(it.getFullAudioUrl()) }
+            val mediaItems = songs.map { createMediaItem(it) }
             player.addMediaItems(mediaItems)
             player.seekTo(startIndex, 0L)
             player.prepare()
             player.play()
+            ensureServiceRunning()
         }
     }
 
@@ -580,9 +620,18 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun stopAndClear() {
+        exoPlayer?.let { player ->
+            player.stop()
+            player.clearMediaItems()
+        }
+        _currentSong.value = null
+        _isPlaying.value = false
+    }
+
     override fun onCleared() {
         super.onCleared()
-        exoPlayer?.release()
-        exoPlayer = null
+        // Không giải phóng ở đây để nhạc có thể tiếp tục phát ở nền (background)
+        // Giải phóng sẽ được thực hiện khi Service bị đóng hoặc thông qua PlayerManager
     }
 }
