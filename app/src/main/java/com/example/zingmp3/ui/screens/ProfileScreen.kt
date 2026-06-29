@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -69,6 +70,9 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
                 },
                 actions = {
                     if (!isEditing) {
+                        IconButton(onClick = { navController.navigate("settings") }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
                         IconButton(onClick = { isEditing = true }) {
                             Icon(Icons.Default.Edit, contentDescription = "Edit")
                         }
@@ -190,7 +194,7 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
                 Button(
                     onClick = {
                         sharedPref.edit().clear().apply()
-                        navController.navigate("login") {
+                        navController.navigate("login_flow") {
                             popUpTo(0) { inclusive = true }
                         }
                     },

@@ -13,7 +13,7 @@ object RetrofitClient {
     // Hoặc nếu Android của bạn đời mới, hãy thử: "http://tung-ThinkPad-X1-Carbon-6th.local:5000/"
 
     private val logging = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.HEADERS
+        level = HttpLoggingInterceptor.Level.BODY
     }
 
     private val client = OkHttpClient.Builder()

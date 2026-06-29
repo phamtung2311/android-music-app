@@ -1,39 +1,32 @@
 package com.example.zingmp3.ui.viewmodel
 
 import android.app.Application
-import androidx.annotation.OptIn
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.zingmp3.network.RetrofitClient
-import com.example.zingmp3.player.PlayerManager
-import com.example.zingmp3.service.PlaybackService
-import android.content.Intent
-import android.os.Build
-import androidx.core.content.ContextCompat
 import com.example.zingmp3.network.model.Artist
 import com.example.zingmp3.network.model.Song
+import com.example.zingmp3.player.PlayerManager
+import com.example.zingmp3.service.PlaybackService
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val sharedPref = application.getSharedPreferences("USER_DATA", android.content.Context.MODE_PRIVATE)
+    private val gson = Gson()
 
     // --- Private StateFlows ---
-    private val _songs = MutableStateFlow<List<Song>>(emptyList())
+    private val _songs = MutableStateFlow<List<Song>>(loadCachedSongs())
     private val _rawGenres = MutableStateFlow<List<String>>(emptyList())
     private val _selectedGenre = MutableStateFlow("All")
     private val _topWeeklySongs = MutableStateFlow<List<Song>>(emptyList())
@@ -48,9 +41,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isCurrentLiked = MutableStateFlow(false)
     private val _isArtistFollowed = MutableStateFlow(false)
     private val _followedArtistIds = MutableStateFlow<Set<Int>>(loadFollowedArtistIds())
-    private val _historyIds = MutableStateFlow<List<Int>>(loadHistory())
+    private val _historyIds = MutableStateFlow<List<Int>>(emptyList())
     private val _searchQuery = MutableStateFlow("")
     private val _searchHistory = MutableStateFlow<List<String>>(loadSearchHistory())
+    private val _isShuffleEnabled = MutableStateFlow(false)
+    private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
+    private val _downloadedSongs = MutableStateFlow<Set<Int>>(emptySet())
+    private val _downloadedSongsMetadata = MutableStateFlow<List<Song>>(loadDownloadedMetadata())
 
     // --- Public StateFlows ---
     val genres: StateFlow<List<String>> = combine(_songs, _rawGenres) { songList, rawGenres ->
@@ -64,21 +61,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("All"))
 
     val selectedGenre: StateFlow<String> = _selectedGenre
+    val songs: StateFlow<List<Song>> = _songs.combine(_selectedGenre) { list, genre ->
+        if (genre == "All") list else list.filter { it.genre?.contains(genre, true) == true }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val songs: StateFlow<List<Song>> = _songs
-        .combine(_selectedGenre) { songList, genre ->
-            if (genre == "All") songList
-            else songList
-                .filter { it.genre?.contains(genre, ignoreCase = true) == true }
-                .sortedByDescending { it.views }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val topWeeklySongs: StateFlow<List<Song>> = _topWeeklySongs
-    val top20WeeklySongs: StateFlow<List<Song>> = _topWeeklySongs
-        .map { it.take(20) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
+    val top20WeeklySongs: StateFlow<List<Song>> = _topWeeklySongs.map { it.take(20) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val username: StateFlow<String> = _username
     val artists: StateFlow<List<Artist>> = _artists
     val artistSongs: StateFlow<List<Song>> = _artistSongs
@@ -91,125 +78,209 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val isArtistFollowed: StateFlow<Boolean> = _isArtistFollowed
     val searchQuery: StateFlow<String> = _searchQuery
     val searchHistory: StateFlow<List<String>> = _searchHistory
-
-    val searchResultsSongs: StateFlow<List<Song>> = combine(_songs, _searchQuery) { songList, query ->
-        if (query.isBlank()) emptyList()
-        else songList.filter { 
-            it.title?.contains(query, ignoreCase = true) == true || 
-            it.artist_name?.contains(query, ignoreCase = true) == true 
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val searchResultsArtists: StateFlow<List<Artist>> = combine(_artists, _searchQuery) { artistList, query ->
-        if (query.isBlank()) emptyList()
-        else artistList.filter { it.stage_name.contains(query, ignoreCase = true) }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val isShuffleEnabled: StateFlow<Boolean> = _isShuffleEnabled
+    val repeatMode: StateFlow<Int> = _repeatMode
+    val downloadedSongs: StateFlow<Set<Int>> = _downloadedSongs
+    val downloadedSongsList: StateFlow<List<Song>> = _downloadedSongsMetadata
 
     val followedArtists: StateFlow<List<Artist>> = combine(_artists, _followedArtistIds) { allArtists, followedIds ->
-        allArtists.filter { it.id in followedIds }
+        allArtists.filter { followedIds.contains(it.id) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Recommendation logic
-    val recommendedSongs: StateFlow<List<Song>> = combine(_songs, _historyIds) { allSongs, historyIds ->
-        if (allSongs.isEmpty()) return@combine emptyList()
-        if (historyIds.isEmpty()) return@combine allSongs.shuffled().take(20)
-
-        val historySongs = historyIds.mapNotNull { id -> allSongs.find { it.id == id } }
-        val recent5 = historySongs.take(5)
-        
-        val historyGenres = historySongs.flatMap { it.genre?.split(",")?.map { g -> g.trim() } ?: emptyList() }.toSet()
-        val historyArtistIds = historySongs.mapNotNull { it.artist_id }.toSet()
-
-        val relatedByArtist = allSongs.filter { it.artist_id in historyArtistIds && it.id !in historyIds }
-        val relatedByGenre = allSongs.filter { song -> 
-            val songGenres = song.genre?.split(",")?.map { it.trim() } ?: emptyList()
-            songGenres.any { it in historyGenres } && song.id !in historyIds 
-        }
-
-        val combined = (recent5 + (relatedByArtist + relatedByGenre).distinct().shuffled()).take(20)
-        
-        if (combined.size < 10 && allSongs.size > combined.size) {
-            (combined + (allSongs - combined.toSet()).shuffled()).take(20)
-        } else {
-            combined
-        }
+    val searchResultsSongs: StateFlow<List<Song>> = combine(_songs, _searchQuery) { list, query ->
+        if (query.isBlank()) emptyList() else list.filter { it.title?.contains(query, true) == true || it.artist_name?.contains(query, true) == true }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val recommendedArtists: StateFlow<List<Artist>> = _artists
-        .map { it.sortedByDescending { artist -> artist.followers_count } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val searchResultsArtists: StateFlow<List<Artist>> = combine(_artists, _searchQuery) { list, query ->
+        if (query.isBlank()) emptyList() else list.filter { it.stage_name.contains(query, true) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val recommendedSongs: StateFlow<List<Song>> = _songs.map { it.shuffled().take(10) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val recommendedArtists: StateFlow<List<Artist>> = _artists.map { it.sortedByDescending { a -> a.followers_count }.take(10) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private var exoPlayer: ExoPlayer? = null
     private var isPlayerListenerAdded = false
-    // currentPlayQueue is now in PlayerManager
     private var statsJob: Job? = null
 
     init {
-        setupPlayer()
+        _downloadedSongs.value = _downloadedSongsMetadata.value.map { it.id }.toSet()
         refreshData()
-        updateProgress()
         loadUsername()
-        // Khởi động service ngay để chuẩn bị MediaSession
-        val intent = Intent(getApplication(), PlaybackService::class.java)
-        getApplication<Application>().startService(intent)
+        setupPlayer()
+        restorePlaybackState()
     }
 
-    private fun loadUsername() {
-        _username.value = sharedPref.getString("username", "User") ?: "User"
+    // --- Persistence & Metadata Logic ---
+
+    private fun loadDownloadedMetadata(): List<Song> {
+        return try {
+            val json = sharedPref?.getString("downloaded_metadata", null)
+            if (json != null) {
+                val type = object : TypeToken<List<Song>>() {}.type
+                gson.fromJson(json, type)
+            } else emptyList()
+        } catch (e: Exception) { emptyList() }
     }
 
-    private fun loadHistory(): List<Int> {
-        val historyStr = sharedPref.getString("listening_history", "") ?: ""
-        return if (historyStr.isEmpty()) emptyList() else historyStr.split(",").mapNotNull { it.toIntOrNull() }
+    private fun saveDownloadedMetadata(songs: List<Song>) {
+        sharedPref?.edit()?.putString("downloaded_metadata", gson.toJson(songs))?.apply()
     }
 
-    private fun loadFollowedArtistIds(): Set<Int> {
-        val idsStr = sharedPref.getString("followed_artist_ids", "") ?: ""
-        return if (idsStr.isEmpty()) emptySet() else idsStr.split(",").mapNotNull { it.toIntOrNull() }.toSet()
+    private fun loadCachedSongs(): List<Song> {
+        val json = sharedPref?.getString("cached_songs", null)
+        return if (json != null) {
+            try {
+                val type = object : TypeToken<List<Song>>() {}.type
+                gson.fromJson(json, type)
+            } catch (e: Exception) { emptyList() }
+        } else emptyList()
     }
 
-    private fun loadSearchHistory(): List<String> {
-        val historyStr = sharedPref.getString("search_history", "") ?: ""
-        return if (historyStr.isEmpty()) emptyList() else historyStr.split("|")
+    private fun saveCachedSongs(songs: List<Song>) {
+        sharedPref?.edit()?.putString("cached_songs", gson.toJson(songs))?.apply()
     }
 
+    private fun loadSearchHistory(): List<String> = try { sharedPref?.getStringSet("search_history", emptySet())?.toList() ?: emptyList() } catch (e: Exception) { emptyList() }
+    
     private fun saveSearchHistory(history: List<String>) {
-        sharedPref.edit().putString("search_history", history.joinToString("|")).apply()
+        sharedPref?.edit()?.putStringSet("search_history", history.toSet())?.apply()
     }
 
+    private fun loadFollowedArtistIds(): Set<Int> = try { sharedPref?.getStringSet("followed_artists", emptySet())?.mapNotNull { it.toIntOrNull() }?.toSet() ?: emptySet() } catch (e: Exception) { emptySet() }
+    
     private fun saveFollowedArtistIds(ids: Set<Int>) {
-        sharedPref.edit().putString("followed_artist_ids", ids.joinToString(",")).apply()
+        sharedPref?.edit()?.putStringSet("followed_artists", ids.map { it.toString() }.toSet())?.apply()
     }
 
-    private fun saveHistory(ids: List<Int>) {
-        sharedPref.edit().putString("listening_history", ids.joinToString(",")).apply()
-    }
+    // --- Player Core ---
 
-    private fun addToHistory(songId: Int) {
-        val currentHistory = _historyIds.value.toMutableList()
-        currentHistory.remove(songId)
-        currentHistory.add(0, songId)
-        if (currentHistory.size > 50) {
-            currentHistory.removeAt(currentHistory.size - 1)
+    private fun setupPlayer() {
+        exoPlayer = PlayerManager.getPlayer(getApplication())
+        exoPlayer?.let { player ->
+            if (!isPlayerListenerAdded) {
+                player.addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(state: Int) {
+                        _isBuffering.value = state == Player.STATE_BUFFERING
+                        if (state == Player.STATE_READY) _duration.value = player.duration
+                        if (state == Player.STATE_ENDED) _isPlaying.value = false
+                    }
+
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        val currentQueue = PlayerManager.currentPlayQueue
+                        val index = player.currentMediaItemIndex
+                        if (index in currentQueue.indices) {
+                            val song = currentQueue[index]
+                            _currentSong.value = song
+                            checkLikeStatus(song.id, getUserId())
+                            savePlaybackState()
+                            recordView(song.id)
+                        }
+                    }
+
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        _isPlaying.value = isPlaying
+                        if (isPlaying) updateProgress()
+                    }
+                    
+                    override fun onPlayerError(error: PlaybackException) {
+                        player.seekToNext()
+                        player.prepare()
+                        player.play()
+                    }
+                })
+                isPlayerListenerAdded = true
+            }
+            _isShuffleEnabled.value = player.shuffleModeEnabled
+            _repeatMode.value = player.repeatMode
+            _isPlaying.value = player.isPlaying
         }
-        _historyIds.value = currentHistory
-        saveHistory(currentHistory)
     }
 
-    fun setGenre(genre: String) {
-        _selectedGenre.value = genre
+    fun playPlaylist(songs: List<Song>, startIndex: Int = 0) {
+        if (songs.isEmpty()) return
+        PlayerManager.currentPlayQueue = songs
+        exoPlayer?.let { player ->
+            player.stop()
+            player.clearMediaItems()
+            val mediaItems = songs.map { createMediaItem(it) }
+            player.setMediaItems(mediaItems)
+            player.seekTo(if (startIndex in songs.indices) startIndex else 0, 0L)
+            player.prepare()
+            player.play()
+            ensureServiceRunning()
+            savePlaybackState()
+        }
     }
 
-    fun setSearchQuery(query: String) {
-        _searchQuery.value = query
+    fun playSong(song: Song) {
+        if (_currentSong.value?.id == song.id && exoPlayer?.playbackState != Player.STATE_ENDED) {
+            exoPlayer?.play()
+            return
+        }
+        playPlaylist(listOf(song), 0)
+    }
+
+    // --- Downloads ---
+
+    fun downloadSong(song: Song, onResult: (String) -> Unit) {
+        val downloadDir = getApplication<Application>().getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) ?: return
+        val destinationFile = java.io.File(downloadDir, "${song.id}.mp3")
+        if (destinationFile.exists()) {
+            onResult("Bài hát đã có sẵn")
+            return
+        }
+
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val response = okhttp3.OkHttpClient().newCall(okhttp3.Request.Builder().url(song.getFullAudioUrl()).build()).execute()
+                if (response.isSuccessful) {
+                    response.body?.byteStream()?.use { input -> destinationFile.outputStream().use { output -> input.copyTo(output) } }
+                    val currentMetadata = _downloadedSongsMetadata.value.toMutableList()
+                    if (currentMetadata.none { it.id == song.id }) {
+                        currentMetadata.add(song)
+                        _downloadedSongsMetadata.value = currentMetadata
+                        saveDownloadedMetadata(currentMetadata)
+                    }
+                    val currentIds = _downloadedSongs.value.toMutableSet()
+                    currentIds.add(song.id)
+                    _downloadedSongs.value = currentIds
+                    launch(kotlinx.coroutines.Dispatchers.Main) { onResult("Tải xuống thành công") }
+                }
+            } catch (e: Exception) {
+                launch(kotlinx.coroutines.Dispatchers.Main) { onResult("Lỗi tải xuống: ${e.message}") }
+            }
+        }
+    }
+
+    private fun createMediaItem(song: Song): MediaItem {
+        val downloadDir = getApplication<Application>().getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
+        val localFile = java.io.File(downloadDir, "${song.id}.mp3")
+        val uri = if (localFile.exists()) android.net.Uri.fromFile(localFile) else android.net.Uri.parse(song.getFullAudioUrl())
+
+        return MediaItem.Builder()
+            .setMediaId(song.id.toString())
+            .setUri(uri)
+            .setMediaMetadata(MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist_name).setArtworkUri(android.net.Uri.parse(song.getFullImageUrl() ?: "")).build())
+            .build()
+    }
+
+    // --- Others ---
+    fun togglePlayPause() { exoPlayer?.let { if (it.isPlaying) it.pause() else it.play() } }
+    fun skipToNext() { exoPlayer?.seekToNext() }
+    fun skipToPrevious() { if ((exoPlayer?.currentPosition ?: 0) > 5000) exoPlayer?.seekTo(0) else exoPlayer?.seekToPrevious() }
+    fun toggleShuffle() { exoPlayer?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled; _isShuffleEnabled.value = it.shuffleModeEnabled } }
+    fun toggleRepeatMode() {
+        exoPlayer?.let {
+            val next = when (it.repeatMode) { Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL; Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF }
+            it.repeatMode = next; _repeatMode.value = next
+        }
     }
 
     fun addToSearchHistory(query: String) {
-        if (query.isBlank()) return
-        val currentHistory = _searchHistory.value.toMutableList()
-        currentHistory.remove(query)
-        currentHistory.add(0, query)
-        val newHistory = currentHistory.take(8)
+        val current = _searchHistory.value.toMutableList()
+        current.remove(query)
+        current.add(0, query)
+        val newHistory = current.take(10)
         _searchHistory.value = newHistory
         saveSearchHistory(newHistory)
     }
@@ -220,418 +291,49 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         saveSearchHistory(newHistory)
     }
 
-    fun clearSearchHistory() {
+    fun clearSearchHistory() { 
         _searchHistory.value = emptyList()
         saveSearchHistory(emptyList())
     }
 
-    fun refreshData() {
-        fetchSongs()
-        fetchTopWeekly()
-        fetchGenres()
-        fetchArtists()
-    }
-
-    private fun fetchArtists() {
-        viewModelScope.launch {
+    private fun restorePlaybackState() {
+        val lastQueueJson = sharedPref?.getString("last_queue", null)
+        val lastIndex = sharedPref?.getInt("last_index", -1) ?: -1
+        if (lastQueueJson != null && lastIndex != -1) {
             try {
-                val response = RetrofitClient.api.getArtists()
-                if (response.isSuccessful) {
-                    val artistList = response.body() ?: emptyList()
-                    _artists.value = artistList.sortedByDescending { it.followers_count }
-                    
-                    // Tự động đồng bộ trạng thái quan tâm cho những nghệ sĩ mới tải về
-                    syncFollowedStatus(artistList)
+                val queue: List<Song> = gson.fromJson(lastQueueJson, object : TypeToken<List<Song>>() {}.type)
+                if (queue.isNotEmpty()) {
+                    PlayerManager.currentPlayQueue = queue
+                    viewModelScope.launch { delay(1000); exoPlayer?.setMediaItems(queue.map { createMediaItem(it) }); exoPlayer?.seekTo(lastIndex, 0L); exoPlayer?.prepare() }
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("MusicViewModel", "Error fetching artists", e)
-            }
+            } catch (e: Exception) {}
         }
     }
 
-    private fun syncFollowedStatus(artistList: List<Artist>) {
-        val userId = getUserId()
-        if (userId == -1) return
-        
-        viewModelScope.launch {
-            val currentIds = _followedArtistIds.value.toMutableSet()
-            var changed = false
-            
-            artistList.forEach { artist ->
-                try {
-                    val response = RetrofitClient.api.checkFollowStatus(artist.id, userId)
-                    if (response.isSuccessful) {
-                        val isFollowing = response.body()?.get("isFollowing") as? Boolean ?: false
-                        if (isFollowing) {
-                            if (currentIds.add(artist.id)) changed = true
-                        } else {
-                            if (currentIds.remove(artist.id)) changed = true
-                        }
-                    }
-                } catch (e: Exception) { }
-            }
-            
-            if (changed) {
-                _followedArtistIds.value = currentIds
-                saveFollowedArtistIds(currentIds)
-            }
-        }
+    private fun savePlaybackState() {
+        val queue = PlayerManager.currentPlayQueue
+        val index = exoPlayer?.currentMediaItemIndex ?: -1
+        if (queue.isNotEmpty() && index != -1) sharedPref?.edit()?.putString("last_queue", gson.toJson(queue))?.putInt("last_index", index)?.apply()
     }
 
-    fun fetchArtistSongs(artistId: Int) {
-        viewModelScope.launch {
-            try {
-                val response = RetrofitClient.api.getArtistSongs(artistId)
-                if (response.isSuccessful) {
-                    _artistSongs.value = response.body() ?: emptyList()
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("MusicViewModel", "Error fetching artist songs", e)
-            }
-        }
-    }
-
-    private fun fetchGenres() {
-        viewModelScope.launch {
-            try {
-                val response = RetrofitClient.api.getGenres()
-                if (response.isSuccessful) {
-                    val genreList = response.body()?.map { it.name } ?: emptyList()
-                    _rawGenres.value = genreList
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("MusicViewModel", "Error fetching genres", e)
-            }
-        }
-    }
-
-    private fun getUserId(): Int = sharedPref.getInt("userId", -1)
-
-    @OptIn(UnstableApi::class)
-    private fun setupPlayer() {
-        val player = PlayerManager.getPlayer(getApplication())
-        
-        if (!isPlayerListenerAdded) {
-            player.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    _isBuffering.value = (state == Player.STATE_BUFFERING)
-                    if (state == Player.STATE_READY) {
-                        _duration.value = player.duration
-                    }
-                }
-
-                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                    super.onMediaItemTransition(mediaItem, reason)
-                    val index = player.currentMediaItemIndex
-                    val queue = PlayerManager.currentPlayQueue
-                    if (index >= 0 && index < queue.size) {
-                        val song = queue[index]
-                        _currentSong.value = song
-                        addToHistory(song.id)
-                        
-                        val userId = getUserId()
-                        if (userId != -1) {
-                            checkLikeStatus(song.id, userId)
-                        }
-                        
-                        statsJob?.cancel()
-                        statsJob = viewModelScope.launch {
-                            delay(2000)
-                            recordView(song.id)
-                        }
-                    }
-                }
-
-                override fun onIsPlayingChanged(isPlayingNow: Boolean) {
-                    _isPlaying.value = isPlayingNow
-                    if (isPlayingNow) {
-                        ensureServiceRunning()
-                    }
-                }
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    android.util.Log.e("MusicViewModel", "Player error: ${error.message}", error)
-                    _isPlaying.value = false
-                }
-            })
-            isPlayerListenerAdded = true
-        }
-        
-        exoPlayer = player
-        // mediaSession sẽ được khởi tạo bởi PlaybackService
-    }
-
-    private fun ensureServiceRunning() {
-        val intent = Intent(getApplication(), PlaybackService::class.java)
-        // Dùng startForegroundService để báo cho Android biết đây là dịch vụ quan trọng (phát nhạc)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            getApplication<Application>().startForegroundService(intent)
-        } else {
-            getApplication<Application>().startService(intent)
-        }
-    }
-
-    private fun updateProgress() {
-        viewModelScope.launch {
-            while (true) {
-                try {
-                    exoPlayer?.let { player ->
-                        if (player.playbackState != Player.STATE_IDLE && 
-                            player.playbackState != Player.STATE_ENDED) {
-                            if (player.isPlaying) {
-                                _currentPosition.value = player.currentPosition
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("MusicViewModel", "Error in updateProgress", e)
-                }
-                delay(1000)
-            }
-        }
-    }
-
-    fun seekTo(position: Long) {
-        exoPlayer?.seekTo(position)
-    }
-
-    private fun fetchSongs() {
-        viewModelScope.launch {
-            try {
-                val response = RetrofitClient.api.getSongs()
-                if (response.isSuccessful) {
-                    val songList = response.body() ?: emptyList()
-                    _songs.value = songList
-                    _currentSong.value?.let { current ->
-                        songList.find { it.id == current.id }?.let { updated ->
-                            _currentSong.value = updated
-                        }
-                    }
-                } else {
-                    android.util.Log.e("MusicViewModel", "Fetch songs failed: ${response.code()} ${response.message()}")
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("MusicViewModel", "Error fetching songs", e)
-            }
-        }
-    }
-
-    fun fetchTopWeekly() {
-        viewModelScope.launch {
-            try {
-                val response = RetrofitClient.api.getTopWeeklySongs()
-                if (response.isSuccessful) {
-                    _topWeeklySongs.value = response.body() ?: emptyList()
-                } else {
-                    android.util.Log.e("MusicViewModel", "Fetch top weekly failed: ${response.code()}")
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("MusicViewModel", "Error fetching top weekly", e)
-            }
-        }
-    }
-
-    private fun createMediaItem(song: Song): MediaItem {
-        val metadata = MediaMetadata.Builder()
-            .setTitle(song.title)
-            .setArtist(song.artist_name)
-            .setArtworkUri(android.net.Uri.parse(song.getFullImageUrl()))
-            .build()
-        
-        return MediaItem.Builder()
-            .setUri(song.getFullAudioUrl())
-            .setMediaId(song.id.toString())
-            .setMediaMetadata(metadata)
-            .build()
-    }
-
-    fun playSong(song: Song) {
-        PlayerManager.currentPlayQueue = listOf(song)
-        _currentSong.value = song
-        addToHistory(song.id)
-        
-        val userId = getUserId()
-        if (userId != -1) {
-            checkLikeStatus(song.id, userId)
-        } else {
-            _isCurrentLiked.value = false
-        }
-        
-        statsJob?.cancel()
-        statsJob = viewModelScope.launch {
-            delay(2000) 
-            recordView(song.id)
-        }
-
-        exoPlayer?.let { player ->
-            player.stop()
-            player.clearMediaItems()
-            val mediaItem = createMediaItem(song)
-            player.setMediaItem(mediaItem)
-            player.prepare()
-            player.play()
-            ensureServiceRunning()
-        }
-    }
-
-    fun playPlaylist(songs: List<Song>, startIndex: Int = 0) {
-        if (songs.isEmpty()) return
-        PlayerManager.currentPlayQueue = songs
-        
-        val firstSong = songs[startIndex]
-        _currentSong.value = firstSong
-        
-        val userId = getUserId()
-        if (userId != -1) {
-            checkLikeStatus(firstSong.id, userId)
-        }
-        
-        statsJob?.cancel()
-        statsJob = viewModelScope.launch {
-            delay(2000)
-            recordView(firstSong.id)
-        }
-
-        exoPlayer?.let { player ->
-            player.stop()
-            player.clearMediaItems()
-            val mediaItems = songs.map { createMediaItem(it) }
-            player.addMediaItems(mediaItems)
-            player.seekTo(startIndex, 0L)
-            player.prepare()
-            player.play()
-            ensureServiceRunning()
-        }
-    }
-
-    fun checkFollowStatus(artistId: Int) {
-        val userId = getUserId()
-        if (userId == -1) return
-        viewModelScope.launch {
-            try {
-                val response = RetrofitClient.api.checkFollowStatus(artistId, userId)
-                if (response.isSuccessful) {
-                    val body = response.body()
-                    val isFollowing = body?.get("isFollowing") as? Boolean ?: false
-                    _isArtistFollowed.value = isFollowing
-                    
-                    // Sync local list
-                    val currentIds = _followedArtistIds.value.toMutableSet()
-                    if (isFollowing) currentIds.add(artistId) else currentIds.remove(artistId)
-                    if (currentIds != _followedArtistIds.value) {
-                        _followedArtistIds.value = currentIds
-                        saveFollowedArtistIds(currentIds)
-                    }
-                }
-            } catch (e: Exception) {
-                _isArtistFollowed.value = false
-            }
-        }
-    }
-
-    fun followArtist(artistId: Int) {
-        val userId = getUserId()
-        if (userId == -1) return
-        viewModelScope.launch {
-            try {
-                val response = RetrofitClient.api.followArtist(artistId, userId)
-                if (response.isSuccessful) {
-                    val body = response.body()
-                    val isFollowing = body?.get("isFollowing") as? Boolean ?: false
-                    _isArtistFollowed.value = isFollowing
-                    
-                    // Update local list
-                    val currentIds = _followedArtistIds.value.toMutableSet()
-                    if (isFollowing) currentIds.add(artistId) else currentIds.remove(artistId)
-                    _followedArtistIds.value = currentIds
-                    saveFollowedArtistIds(currentIds)
-                    
-                    fetchArtists() 
-                }
-            } catch (e: Exception) {
-                // handle error
-            }
-        }
-    }
-
-    private fun checkLikeStatus(songId: Int, userId: Int) {
-        viewModelScope.launch {
-            try {
-                val response = RetrofitClient.api.checkFavoriteStatus(songId, userId)
-                if (response.isSuccessful) {
-                    val body = response.body()
-                    val isFav = body?.get("isFavorite") as? Boolean ?: false
-                    _isCurrentLiked.value = isFav
-                }
-            } catch (e: Exception) {
-                _isCurrentLiked.value = false
-            }
-        }
-    }
-
-    private fun recordView(songId: Int) {
-        val userId = getUserId()
-        viewModelScope.launch {
-            try {
-                RetrofitClient.api.recordView(songId, if (userId != -1) userId else null)
-            } catch (e: Exception) { /* ignore */ }
-        }
-    }
-
-    fun likeSong(songId: Int, onError: (String) -> Unit) {
-        val userId = getUserId()
-        if (userId == -1) {
-            onError("Vui lòng đăng nhập")
-            return
-        }
-
-        viewModelScope.launch {
-            try {
-                val response = RetrofitClient.api.likeSong(songId, userId)
-                if (response.isSuccessful) {
-                    val body = response.body()
-                    val isLikedNow = body?.get("isLiked") as? Boolean 
-                                    ?: body?.get("liked") as? Boolean 
-                                    ?: !_isCurrentLiked.value
-                    
-                    _isCurrentLiked.value = isLikedNow
-                    fetchSongs()
-                } else {
-                    onError("Lỗi máy chủ (${response.code()})")
-                }
-            } catch (e: Exception) {
-                onError("Lỗi kết nối mạng")
-            }
-        }
-    }
-
-    fun favoriteSong(songId: Int) {
-        val userId = getUserId()
-        if (userId == -1) return
-        viewModelScope.launch {
-            try {
-                RetrofitClient.api.favoriteSong(songId, userId)
-            } catch (e: Exception) { /* ignore */ }
-        }
-    }
-
-    fun togglePlayPause() {
-        exoPlayer?.let { player ->
-            if (player.isPlaying) player.pause() else player.play()
-        }
-    }
-
-    fun stopAndClear() {
-        exoPlayer?.let { player ->
-            player.stop()
-            player.clearMediaItems()
-        }
-        _currentSong.value = null
-        _isPlaying.value = false
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        // Không giải phóng ở đây để nhạc có thể tiếp tục phát ở nền (background)
-        // Giải phóng sẽ được thực hiện khi Service bị đóng hoặc thông qua PlayerManager
-    }
+    fun loadUsername() { _username.value = sharedPref?.getString("username", "User") ?: "User" }
+    fun setGenre(genre: String) { _selectedGenre.value = genre }
+    fun setSearchQuery(query: String) { _searchQuery.value = query }
+    fun refreshData() { fetchSongs(); fetchTopWeekly(); fetchArtists(); fetchGenres() }
+    fun fetchArtists() { viewModelScope.launch { try { val r = RetrofitClient.api.getArtists(); if (r.isSuccessful) _artists.value = r.body() ?: emptyList() } catch (e: Exception) {} } }
+    fun fetchArtistSongs(id: Int) { viewModelScope.launch { try { val r = RetrofitClient.api.getArtistSongs(id); if (r.isSuccessful) _artistSongs.value = r.body() ?: emptyList() } catch (e: Exception) {} } }
+    fun fetchGenres() { viewModelScope.launch { try { val r = RetrofitClient.api.getGenres(); if (r.isSuccessful) _rawGenres.value = r.body()?.map { it.name } ?: emptyList() } catch (e: Exception) {} } }
+    private fun getUserId(): Int = sharedPref?.getInt("userId", -1) ?: -1
+    private fun ensureServiceRunning() { val intent = android.content.Intent(getApplication(), PlaybackService::class.java); if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) getApplication<Application>().startForegroundService(intent) else getApplication<Application>().startService(intent) }
+    private fun updateProgress() { viewModelScope.launch { while (_isPlaying.value) { _currentPosition.value = exoPlayer?.currentPosition ?: 0L; delay(1000) } } }
+    fun seekTo(pos: Long) { exoPlayer?.seekTo(pos) }
+    fun fetchSongs() { viewModelScope.launch { try { val r = RetrofitClient.api.getSongs(); if (r.isSuccessful) { val list = r.body() ?: emptyList(); _songs.value = list; saveCachedSongs(list) } } catch (e: Exception) {} } }
+    fun fetchTopWeekly() { viewModelScope.launch { try { val r = RetrofitClient.api.getTopWeeklySongs(); if (r.isSuccessful) _topWeeklySongs.value = r.body() ?: emptyList() } catch (e: Exception) {} } }
+    fun checkFollowStatus(id: Int) { viewModelScope.launch { try { val r = RetrofitClient.api.checkFollowStatus(id, getUserId()); if (r.isSuccessful) _isArtistFollowed.value = r.body()?.get("isFollowing") as? Boolean ?: false } catch (e: Exception) {} } }
+    fun followArtist(id: Int) { viewModelScope.launch { try { val r = RetrofitClient.api.followArtist(id, getUserId()); if (r.isSuccessful) { val body = r.body(); _isArtistFollowed.value = body?.get("isFollowing") as? Boolean ?: false; fetchArtists() } } catch (e: Exception) {} } }
+    fun checkLikeStatus(songId: Int, userId: Int) { viewModelScope.launch { try { val r = RetrofitClient.api.checkFavoriteStatus(songId, userId); if (r.isSuccessful) _isCurrentLiked.value = r.body()?.get("isFavorite") as? Boolean ?: false } catch (e: Exception) {} } }
+    fun recordView(id: Int) { viewModelScope.launch { try { RetrofitClient.api.recordView(id, getUserId().let { if (it == -1) null else it }) } catch (e: Exception) {} } }
+    fun likeSong(id: Int, onRes: (String) -> Unit) { viewModelScope.launch { try { val r = RetrofitClient.api.likeSong(id, getUserId()); if (r.isSuccessful) { val liked = r.body()?.get("isFavorite") as? Boolean ?: false; _isCurrentLiked.value = liked; onRes(if (liked) "Đã thích" else "Đã bỏ thích") } } catch (e: Exception) {} } }
+    fun favoriteSong(id: Int) { /* logic */ }
+    fun stopAndClear() { exoPlayer?.stop(); exoPlayer?.clearMediaItems(); _currentSong.value = null; _isPlaying.value = false }
 }

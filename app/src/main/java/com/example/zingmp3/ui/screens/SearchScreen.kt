@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -41,6 +42,7 @@ fun SearchScreen(
     val searchHistory by musicViewModel.searchHistory.collectAsState()
     
     val focusManager = LocalFocusManager.current
+    var songForOptions by remember { mutableStateOf<Song?>(null) }
     var songToAddToPlaylist by remember { mutableStateOf<Song?>(null) }
 
     Column(
@@ -181,15 +183,15 @@ fun SearchScreen(
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
                     }
-                    items(searchResultsSongs, key = { "search_song_${it.id}" }) { song ->
+                    itemsIndexed(searchResultsSongs, key = { _, song: Song -> "search_song_${song.id}" }) { index, song ->
                         SongListItem(
                             song = song,
                             onClick = {
                                 musicViewModel.addToSearchHistory(searchQuery)
-                                musicViewModel.playSong(song)
+                                musicViewModel.playPlaylist(searchResultsSongs, index)
                                 navController.navigate("player")
                             },
-                            onMoreClick = { songToAddToPlaylist = song },
+                            onMoreClick = { songForOptions = song },
                             onArtistClick = { artistId ->
                                 musicViewModel.addToSearchHistory(searchQuery)
                                 navController.navigate("artist_detail/$artistId")
@@ -211,6 +213,19 @@ fun SearchScreen(
             }
             item { Spacer(modifier = Modifier.height(80.dp)) }
         }
+    }
+
+    songForOptions?.let { song ->
+        SongOptionsBottomSheet(
+            song = song,
+            musicViewModel = musicViewModel,
+            playlistViewModel = playlistViewModel,
+            onDismiss = { songForOptions = null },
+            onAddToPlaylist = {
+                songForOptions = null
+                songToAddToPlaylist = song
+            }
+        )
     }
 
     songToAddToPlaylist?.let { song ->

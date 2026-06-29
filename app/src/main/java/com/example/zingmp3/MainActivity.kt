@@ -40,18 +40,22 @@ class MainActivity : ComponentActivity() {
             val playlistViewModel: PlaylistViewModel = viewModel()
 
             val startDest = if (!isLoggedIn) {
-                "login"
+                "welcome"
             } else if (role == "admin") {
                 "admin"
             } else {
-                "home"
+                "main_flow"
             }
 
             NavHost(
                 navController = navController,
                 startDestination = startDest
             ) {
-                composable("login") {
+                composable("welcome") {
+                    WelcomeScreen(navController)
+                }
+
+                composable("login_flow") {
                     LoginScreen(navController)
                 }
 
@@ -59,40 +63,12 @@ class MainActivity : ComponentActivity() {
                     RegisterScreen(navController)
                 }
 
-                composable("home") {
-                    HomeScreen(navController, musicViewModel, playlistViewModel)
-                }
-
-                composable(
-                    "playlist_detail/{playlistId}",
-                    arguments = listOf(navArgument("playlistId") { type = NavType.IntType })
-                ) { backStackEntry ->
-                    val playlistId = backStackEntry.arguments?.getInt("playlistId") ?: 0
-                    PlaylistDetailScreen(navController, playlistId, playlistViewModel, musicViewModel)
+                composable("main_flow") {
+                    MainScreen(rememberNavController(), musicViewModel, playlistViewModel)
                 }
 
                 composable("admin") {
                     AdminScreen(navController)
-                }
-
-                composable("player") {
-                    PlayerScreen(navController, musicViewModel, playlistViewModel)
-                }
-
-                composable("profile") {
-                    ProfileScreen(navController)
-                }
-
-                composable("artists") {
-                    ArtistsScreen(navController, musicViewModel)
-                }
-
-                composable(
-                    "artist_detail/{artistId}",
-                    arguments = listOf(navArgument("artistId") { type = NavType.IntType })
-                ) { backStackEntry ->
-                    val artistId = backStackEntry.arguments?.getInt("artistId") ?: 0
-                    ArtistDetailScreen(navController, artistId, musicViewModel)
                 }
             }
         }

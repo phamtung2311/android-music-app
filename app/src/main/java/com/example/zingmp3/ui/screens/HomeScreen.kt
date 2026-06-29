@@ -45,17 +45,12 @@ fun HomeScreen(
     val recommendedSongs by musicViewModel.recommendedSongs.collectAsState()
     val recommendedArtists by musicViewModel.recommendedArtists.collectAsState()
     val top20Songs by musicViewModel.top20WeeklySongs.collectAsState()
-    val currentSong by musicViewModel.currentSong.collectAsState()
-    val isPlaying by musicViewModel.isPlaying.collectAsState()
     val selectedGenre by musicViewModel.selectedGenre.collectAsState()
     val genres by musicViewModel.genres.collectAsState()
 
-    var selectedItem by remember { mutableIntStateOf(0) }
+    var songForOptions by remember { mutableStateOf<Song?>(null) }
     var songToAddToPlaylist by remember { mutableStateOf<Song?>(null) }
     
-    val items = remember { listOf("Home", "Search", "Library", "Premium") }
-    val icons = remember { listOf(Icons.Filled.Home, Icons.Filled.Search, Icons.Filled.LibraryMusic, Icons.Filled.WorkspacePremium) }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -63,7 +58,6 @@ fun HomeScreen(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable {
-                            selectedItem = 0
                             musicViewModel.setGenre("All")
                         }
                     ) {
@@ -79,45 +73,9 @@ fun HomeScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black, titleContentColor = Color.White, actionIconContentColor = Color.White)
             )
         },
-        bottomBar = {
-            Column {
-                currentSong?.let { song ->
-                    NowPlayingBar(
-                        song = song, 
-                        isPlaying = isPlaying, 
-                        onTogglePlay = musicViewModel::togglePlayPause, 
-                        onClose = musicViewModel::stopAndClear,
-                        onClick = { navController.navigate("player") },
-                        onArtistClick = { artistId ->
-                            navController.navigate("artist_detail/$artistId")
-                        }
-                    )
-                }
-                NavigationBar(containerColor = Color.Black, contentColor = Color.White) {
-                    items.forEachIndexed { index, item ->
-                        NavigationBarItem(
-                            icon = { Icon(icons[index], item) },
-                            label = { Text(item) },
-                            selected = selectedItem == index,
-                            onClick = { selectedItem = index },
-                            colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFF1DB954), selectedTextColor = Color(0xFF1DB954), unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray, indicatorColor = Color.Transparent)
-                        )
-                    }
-                }
-            }
-        },
         containerColor = Color.Black
     ) { padding ->
-        if (selectedItem == 1) {
-            Box(modifier = Modifier.padding(padding)) {
-                SearchScreen(navController, musicViewModel, playlistViewModel)
-            }
-        } else if (selectedItem == 2) {
-            Box(modifier = Modifier.padding(padding)) {
-                LibraryScreen(navController, playlistViewModel, musicViewModel)
-            }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -159,10 +117,10 @@ fun HomeScreen(
                                         rank = index + 1, 
                                         song = song, 
                                         onClick = {
-                                            musicViewModel.playSong(song)
+                                            musicViewModel.playPlaylist(top20Songs, index)
                                             navController.navigate("player")
                                         }, 
-                                        onMoreClick = { songToAddToPlaylist = song },
+                                        onMoreClick = { songForOptions = song },
                                         onArtistClick = { artistId ->
                                             navController.navigate("artist_detail/$artistId")
                                         }
@@ -179,11 +137,11 @@ fun HomeScreen(
                         Text(text = "Gợi ý cho $username", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(16.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            items(recommendedSongs, key = { it.id }) { song ->
+                            itemsIndexed(recommendedSongs, key = { _, it -> it.id }) { index, song ->
                                 SongCard(
                                     song = song, 
                                     onClick = { 
-                                        musicViewModel.playSong(song)
+                                        musicViewModel.playPlaylist(recommendedSongs, index)
                                         navController.navigate("player")
                                     },
                                     onArtistClick = { artistId ->
@@ -240,14 +198,14 @@ fun HomeScreen(
                         LazyColumn(
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(songs, key = { "recent_scroll_${it.id}" }) { song ->
+                            itemsIndexed(songs, key = { _, it -> "recent_scroll_${it.id}" }) { index, song ->
                                 SongListItem(
                                     song = song,
                                     onClick = {
-                                        musicViewModel.playSong(song)
+                                        musicViewModel.playPlaylist(songs, index)
                                         navController.navigate("player")
                                     },
-                                    onMoreClick = { songToAddToPlaylist = song },
+                                    onMoreClick = { songForOptions = song },
                                     onArtistClick = { artistId ->
                                         navController.navigate("artist_detail/$artistId")
                                     }
@@ -257,8 +215,20 @@ fun HomeScreen(
                     }
                 }
                 item { Spacer(modifier = Modifier.height(24.dp)) }
-            }
         }
+    }
+
+    songForOptions?.let { song ->
+        SongOptionsBottomSheet(
+            song = song,
+            musicViewModel = musicViewModel,
+            playlistViewModel = playlistViewModel,
+            onDismiss = { songForOptions = null },
+            onAddToPlaylist = {
+                songForOptions = null
+                songToAddToPlaylist = song
+            }
+        )
     }
 
     songToAddToPlaylist?.let { song ->

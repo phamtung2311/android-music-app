@@ -17,6 +17,7 @@ data class Song(
     @SerializedName("release_date") val releaseDate: String? = null,
     @SerializedName("views") val views: Int = 0,
     @SerializedName("likes_count") val likes_count: Int = 0,
+    @SerializedName("lyrics") val lyrics: String? = null,
     @SerializedName("is_public") val isPublic: Boolean = true
 ) {
     fun getFullAudioUrl(): String {
