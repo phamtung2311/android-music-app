@@ -22,7 +22,8 @@ fun AdminScreen(navController: NavController) {
             Button(onClick = {
                 val sharedPref = context.getSharedPreferences("USER_DATA", Context.MODE_PRIVATE)
                 sharedPref.edit().clear().apply()
-                navController.navigate("login") {
+                com.example.zingmp3.network.RetrofitClient.setToken(null)
+                navController.navigate("login_flow") {
                     popUpTo("admin") { inclusive = true }
                 }
             }) {

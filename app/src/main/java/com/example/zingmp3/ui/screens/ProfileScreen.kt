@@ -194,6 +194,7 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
                 Button(
                     onClick = {
                         sharedPref.edit().clear().apply()
+                        com.example.zingmp3.network.RetrofitClient.setToken(null)
                         navController.navigate("login_flow") {
                             popUpTo(0) { inclusive = true }
                         }

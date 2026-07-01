@@ -33,6 +33,8 @@ class MainActivity : ComponentActivity() {
         val sharedPref = getSharedPreferences("USER_DATA", Context.MODE_PRIVATE)
         val isLoggedIn = sharedPref.getBoolean("isLoggedIn", false)
         val role = sharedPref.getString("role", "user")
+        val token = sharedPref.getString("token", null)
+        com.example.zingmp3.network.RetrofitClient.setToken(token)
 
         setContent {
             val navController = rememberNavController()

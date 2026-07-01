@@ -51,6 +51,7 @@ fun LoginScreen(
                 } else {
                     val sharedPref = context.getSharedPreferences("USER_DATA", MODE_PRIVATE)
                     val role = user?.role ?: "user"
+                    val token = response.token
                     
                     sharedPref.edit()
                         .putBoolean("isLoggedIn", true)
@@ -60,7 +61,10 @@ fun LoginScreen(
                         .putString("role", role)
                         .putString("bio", user?.bio)
                         .putString("avatar_url", user?.avatar_url)
+                        .putString("token", token)
                         .apply()
+
+                    com.example.zingmp3.network.RetrofitClient.setToken(token)
 
                     Toast.makeText(context, "Đăng nhập thành công", Toast.LENGTH_SHORT).show()
                     

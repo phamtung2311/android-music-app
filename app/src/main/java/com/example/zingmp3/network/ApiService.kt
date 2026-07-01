@@ -6,46 +6,46 @@ import retrofit2.http.*
 
 interface ApiService {
 
-    @POST("login")
+    @POST("api/login")
     suspend fun login(@Body request: LoginRequest): Response<LoginResponse>
 
-    @POST("register")
+    @POST("api/register")
     suspend fun register(@Body request: RegisterRequest): Response<RegisterResponse>
 
-    @GET("songs")
+    @GET("api/songs")
     suspend fun getSongs(): Response<List<Song>>
 
-    @PUT("profile/{id}")
+    @PUT("api/profile/{id}")
     suspend fun updateProfile(
         @Path("id") id: Int,
         @Body request: UpdateProfileRequest
     ): Response<RegisterResponse>
 
     // API Like (Toggle) - Thử nhận userId từ Query
-    @POST("songs/{id}/like")
+    @POST("api/songs/{id}/like")
     suspend fun likeSong(
         @Path("id") songId: Int,
         @Query("userId") userId: Int
     ): Response<Map<String, Any>>
 
     // API Thêm vào danh sách yêu thích
-    @POST("songs/{id}/favorite")
+    @POST("api/songs/{id}/favorite")
     suspend fun favoriteSong(
         @Path("id") songId: Int,
         @Query("userId") userId: Int
     ): Response<Map<String, Any>>
 
     // API Ghi nhận lượt xem
-    @POST("songs/{id}/view")
+    @POST("api/songs/{id}/view")
     suspend fun recordView(
         @Path("id") songId: Int,
         @Query("userId") userId: Int?
     ): Response<Map<String, Any>>
 
-    @GET("songs/top-weekly")
+    @GET("api/songs/top-weekly")
     suspend fun getTopWeeklySongs(): Response<List<Song>>
 
-    @GET("genres")
+    @GET("api/genres")
     suspend fun getGenres(): Response<List<Genre>>
 
     @GET("api/artists")
@@ -67,7 +67,7 @@ interface ApiService {
     ): Response<Map<String, Any>>
 
     // API Kiểm tra trạng thái
-    @GET("songs/{id}/check-favorite")
+    @GET("api/songs/{id}/check-favorite")
     suspend fun checkFavoriteStatus(
         @Path("id") songId: Int,
         @Query("userId") userId: Int
