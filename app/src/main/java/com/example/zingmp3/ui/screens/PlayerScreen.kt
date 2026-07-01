@@ -191,8 +191,7 @@ fun LikeButton(viewModel: MusicViewModel, songId: Int) {
     
     IconButton(
         onClick = { 
-            viewModel.likeSong(songId) { _ ->
-                val message = if (!isLiked) "Đã thêm vào danh sách Yêu thích" else "Đã xóa khỏi danh sách Yêu thích"
+            viewModel.likeSong(songId) { message ->
                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             }
         }

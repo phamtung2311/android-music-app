@@ -333,7 +333,54 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun followArtist(id: Int) { viewModelScope.launch { try { val r = RetrofitClient.api.followArtist(id, getUserId()); if (r.isSuccessful) { val body = r.body(); _isArtistFollowed.value = body?.get("isFollowing") as? Boolean ?: false; fetchArtists() } } catch (e: Exception) {} } }
     fun checkLikeStatus(songId: Int, userId: Int) { viewModelScope.launch { try { val r = RetrofitClient.api.checkFavoriteStatus(songId, userId); if (r.isSuccessful) _isCurrentLiked.value = r.body()?.get("isFavorite") as? Boolean ?: false } catch (e: Exception) {} } }
     fun recordView(id: Int) { viewModelScope.launch { try { RetrofitClient.api.recordView(id, getUserId().let { if (it == -1) null else it }) } catch (e: Exception) {} } }
-    fun likeSong(id: Int, onRes: (String) -> Unit) { viewModelScope.launch { try { val r = RetrofitClient.api.likeSong(id, getUserId()); if (r.isSuccessful) { val liked = r.body()?.get("isFavorite") as? Boolean ?: false; _isCurrentLiked.value = liked; onRes(if (liked) "Đã thích" else "Đã bỏ thích") } } catch (e: Exception) {} } }
+    fun likeSong(id: Int, onRes: (String) -> Unit) {
+        viewModelScope.launch {
+            val previousLiked = _isCurrentLiked.value
+            val currentSongVal = _currentSong.value
+            
+            // 1. Cập nhật UI ngay lập tức (Optimistic Update)
+            if (currentSongVal?.id == id) {
+                _isCurrentLiked.value = !previousLiked
+                _currentSong.value = currentSongVal.copy(
+                    likes_count = if (!previousLiked) currentSongVal.likes_count + 1 
+                                 else (currentSongVal.likes_count - 1).coerceAtLeast(0)
+                )
+            }
+
+            try {
+                val r = RetrofitClient.api.likeSong(id, getUserId())
+                if (r.isSuccessful) {
+                    val likedFromServer = r.body()?.get("isFavorite") as? Boolean ?: !previousLiked
+                    _isCurrentLiked.value = likedFromServer
+                    
+                    // Cập nhật lại số lượng like thật từ server nếu có (nếu backend trả về)
+                    // Hoặc đồng bộ vào danh sách songs tổng
+                    _songs.value = _songs.value.map { 
+                        if (it.id == id) it.copy(
+                            likes_count = if (likedFromServer) (if (previousLiked) it.likes_count else it.likes_count + 1)
+                                          else (if (previousLiked) it.likes_count - 1 else it.likes_count).coerceAtLeast(0)
+                        ) else it 
+                    }
+                    
+                    onRes(if (likedFromServer) "Đã thích" else "Đã bỏ thích")
+                } else {
+                    // Revert nếu lỗi
+                    if (_currentSong.value?.id == id) {
+                        _isCurrentLiked.value = previousLiked
+                        _currentSong.value = currentSongVal
+                    }
+                    onRes("Không thể thực hiện")
+                }
+            } catch (e: Exception) {
+                // Revert nếu lỗi kết nối
+                if (_currentSong.value?.id == id) {
+                    _isCurrentLiked.value = previousLiked
+                    _currentSong.value = currentSongVal
+                }
+                onRes("Lỗi kết nối")
+            }
+        }
+    }
     fun favoriteSong(id: Int) { /* logic */ }
     fun stopAndClear() { exoPlayer?.stop(); exoPlayer?.clearMediaItems(); _currentSong.value = null; _isPlaying.value = false }
 }
