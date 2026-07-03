@@ -50,6 +50,28 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    fun loginWithGoogle(idToken: String) {
+        viewModelScope.launch {
+            _loginState.value = AuthState.Loading
+            try {
+                val response = repository.loginWithGoogle(GoogleLoginRequest(idToken))
+                if (response.isSuccessful) {
+                    _loginState.value = AuthState.Success(response.body()!!)
+                } else {
+                    val errorMsg = try {
+                        val errorObj = JSONObject(response.errorBody()?.string() ?: "{}")
+                        errorObj.getString("message")
+                    } catch (e: Exception) {
+                        "Đăng nhập Google thất bại"
+                    }
+                    _loginState.value = AuthState.Error(errorMsg)
+                }
+            } catch (e: Exception) {
+                _loginState.value = AuthState.Error("Lỗi kết nối: ${e.message}")
+            }
+        }
+    }
+
     fun register(request: RegisterRequest) {
         viewModelScope.launch {
             _registerState.value = AuthState.Loading

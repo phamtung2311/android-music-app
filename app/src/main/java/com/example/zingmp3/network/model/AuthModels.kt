@@ -17,9 +17,14 @@ data class LoginRequest(
     val password: String
 )
 
+data class GoogleLoginRequest(
+    val idToken: String
+)
+
 data class LoginResponse(
     val message: String,
     val token: String? = null,
+    @SerializedName("refresh_token") val refreshToken: String? = null,
     val user: User? = null
 )
 

@@ -18,16 +18,18 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.zingmp3.ui.viewmodel.MusicViewModel
 import com.example.zingmp3.ui.viewmodel.PlaylistViewModel
 
 @Composable
 fun MainScreen(
-    navController: NavHostController,
+    rootNavController: NavHostController,
     musicViewModel: MusicViewModel = viewModel(),
     playlistViewModel: PlaylistViewModel = viewModel()
 ) {
+    val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
@@ -123,7 +125,7 @@ fun MainScreen(
                     PlayerScreen(navController, musicViewModel, playlistViewModel)
                 }
                 composable("profile") {
-                    ProfileScreen(navController)
+                    ProfileScreen(navController = navController, rootNavController = rootNavController)
                 }
                 composable("artists") {
                     ArtistsScreen(navController, musicViewModel)

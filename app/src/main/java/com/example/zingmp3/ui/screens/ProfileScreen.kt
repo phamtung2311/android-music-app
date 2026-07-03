@@ -30,7 +30,11 @@ import com.example.zingmp3.ui.viewmodel.AuthViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = viewModel()) {
+fun ProfileScreen(
+    navController: NavController,
+    rootNavController: NavController,
+    authViewModel: AuthViewModel = viewModel()
+) {
     val context = LocalContext.current
     val sharedPref = remember { context.getSharedPreferences("USER_DATA", MODE_PRIVATE) }
     
@@ -195,7 +199,7 @@ fun ProfileScreen(navController: NavController, authViewModel: AuthViewModel = v
                     onClick = {
                         sharedPref.edit().clear().apply()
                         com.example.zingmp3.network.RetrofitClient.setToken(null)
-                        navController.navigate("login_flow") {
+                        rootNavController.navigate("login_flow") {
                             popUpTo(0) { inclusive = true }
                         }
                     },

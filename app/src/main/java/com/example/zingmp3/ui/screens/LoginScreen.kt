@@ -21,11 +21,18 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.zingmp3.network.model.LoginRequest
 import com.example.zingmp3.ui.viewmodel.AuthState
 import com.example.zingmp3.ui.viewmodel.AuthViewModel
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
@@ -33,6 +40,10 @@ fun LoginScreen(
     viewModel: AuthViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val credentialManager = CredentialManager.create(context)
+    val webClientId = "1041935544835-vj0r3huv5t08jscubv6k0lndj26jrk54.apps.googleusercontent.com" // Placeholder, should ideally be in a safe place
+
     var login by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -52,6 +63,7 @@ fun LoginScreen(
                     val sharedPref = context.getSharedPreferences("USER_DATA", MODE_PRIVATE)
                     val role = user?.role ?: "user"
                     val token = response.token
+                    val refreshToken = response.refreshToken
                     
                     sharedPref.edit()
                         .putBoolean("isLoggedIn", true)
@@ -62,6 +74,7 @@ fun LoginScreen(
                         .putString("bio", user?.bio)
                         .putString("avatar_url", user?.avatar_url)
                         .putString("token", token)
+                        .putString("refresh_token", refreshToken)
                         .apply()
 
                     com.example.zingmp3.network.RetrofitClient.setToken(token)
@@ -199,8 +212,41 @@ fun LoginScreen(
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 // Quick login placeholders
-                SocialLoginButton("Google", Color.White, Color.Black)
-                SocialLoginButton("Facebook", Color(0xFF1877F2), Color.White)
+                SocialLoginButton("Google", Color.White, Color.Black) {
+                    val googleIdOption = GetGoogleIdOption.Builder()
+                        .setFilterByAuthorizedAccounts(false)
+                        .setServerClientId(webClientId)
+                        .setAutoSelectEnabled(false)
+                        .build()
+
+                    val request = GetCredentialRequest.Builder()
+                        .addCredentialOption(googleIdOption)
+                        .build()
+
+                    scope.launch {
+                        try {
+                            val result = credentialManager.getCredential(
+                                context = context,
+                                request = request
+                            )
+                            val credential = result.credential
+                            if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                                val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                                val idToken = googleIdTokenCredential.idToken
+                                viewModel.loginWithGoogle(idToken)
+                            } else if (credential is GoogleIdTokenCredential) {
+                                viewModel.loginWithGoogle(credential.idToken)
+                            }
+                        } catch (e: GetCredentialException) {
+                            Toast.makeText(context, "Hủy đăng nhập Google", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Lỗi Google: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                SocialLoginButton("Facebook", Color(0xFF1877F2), Color.White) {
+                    // Facebook placeholder
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -213,9 +259,9 @@ fun LoginScreen(
 }
 
 @Composable
-fun SocialLoginButton(text: String, containerColor: Color, contentColor: Color) {
+fun SocialLoginButton(text: String, containerColor: Color, contentColor: Color, onClick: () -> Unit) {
     Button(
-        onClick = { },
+        onClick = onClick,
         colors = ButtonDefaults.buttonColors(containerColor = containerColor),
         modifier = Modifier.width(140.dp).height(48.dp),
         shape = RoundedCornerShape(24.dp)

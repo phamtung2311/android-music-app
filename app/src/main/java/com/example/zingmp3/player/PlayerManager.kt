@@ -18,8 +18,8 @@ object PlayerManager {
                 .build()
 
             exoPlayer = ExoPlayer.Builder(context.applicationContext)
-                .setAudioAttributes(audioAttributes, true) // true để tự động quản lý AudioFocus
-                .setHandleAudioBecomingNoisy(true) // Tự dừng khi rút tai nghe
+                .setAudioAttributes(audioAttributes, true)
+                .setHandleAudioBecomingNoisy(true)
                 .build()
         }
         return exoPlayer!!

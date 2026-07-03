@@ -198,6 +198,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playPlaylist(songs: List<Song>, startIndex: Int = 0) {
         if (songs.isEmpty()) return
+        
+        // Khởi động Service trước khi bắt đầu phát nhạc
+        ensureServiceRunning()
+        
         PlayerManager.currentPlayQueue = songs
         exoPlayer?.let { player ->
             player.stop()
@@ -207,7 +211,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             player.seekTo(if (startIndex in songs.indices) startIndex else 0, 0L)
             player.prepare()
             player.play()
-            ensureServiceRunning()
             savePlaybackState()
         }
     }
@@ -215,6 +218,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun playSong(song: Song) {
         if (_currentSong.value?.id == song.id && exoPlayer?.playbackState != Player.STATE_ENDED) {
             exoPlayer?.play()
+            ensureServiceRunning()
             return
         }
         playPlaylist(listOf(song), 0)
@@ -324,8 +328,27 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun fetchArtistSongs(id: Int) { viewModelScope.launch { try { val r = RetrofitClient.api.getArtistSongs(id); if (r.isSuccessful) _artistSongs.value = r.body() ?: emptyList() } catch (e: Exception) {} } }
     fun fetchGenres() { viewModelScope.launch { try { val r = RetrofitClient.api.getGenres(); if (r.isSuccessful) _rawGenres.value = r.body()?.map { it.name } ?: emptyList() } catch (e: Exception) {} } }
     private fun getUserId(): Int = sharedPref?.getInt("userId", -1) ?: -1
-    private fun ensureServiceRunning() { val intent = android.content.Intent(getApplication(), PlaybackService::class.java); if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) getApplication<Application>().startForegroundService(intent) else getApplication<Application>().startService(intent) }
-    private fun updateProgress() { viewModelScope.launch { while (_isPlaying.value) { _currentPosition.value = exoPlayer?.currentPosition ?: 0L; delay(1000) } } }
+    private fun ensureServiceRunning() { 
+        val intent = android.content.Intent(getApplication(), PlaybackService::class.java)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            getApplication<Application>().startForegroundService(intent)
+        } else {
+            getApplication<Application>().startService(intent)
+        }
+    }
+    private fun updateProgress() { 
+        viewModelScope.launch { 
+            while (_isPlaying.value) { 
+                try {
+                    _currentPosition.value = exoPlayer?.currentPosition ?: 0L 
+                } catch (e: Exception) {
+                    _isPlaying.value = false
+                    break
+                }
+                delay(1000) 
+            } 
+        } 
+    }
     fun seekTo(pos: Long) { exoPlayer?.seekTo(pos) }
     fun fetchSongs() { viewModelScope.launch { try { val r = RetrofitClient.api.getSongs(); if (r.isSuccessful) { val list = r.body() ?: emptyList(); _songs.value = list; saveCachedSongs(list) } } catch (e: Exception) {} } }
     fun fetchTopWeekly() { viewModelScope.launch { try { val r = RetrofitClient.api.getTopWeeklySongs(); if (r.isSuccessful) _topWeeklySongs.value = r.body() ?: emptyList() } catch (e: Exception) {} } }

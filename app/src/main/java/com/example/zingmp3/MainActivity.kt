@@ -66,7 +66,11 @@ class MainActivity : ComponentActivity() {
                 }
 
                 composable("main_flow") {
-                    MainScreen(rememberNavController(), musicViewModel, playlistViewModel)
+                    MainScreen(
+                        rootNavController = navController,
+                        musicViewModel = musicViewModel,
+                        playlistViewModel = playlistViewModel
+                    )
                 }
 
                 composable("admin") {

@@ -8,7 +8,6 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.annotation.OptIn
-import androidx.core.app.NotificationCompat
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
@@ -20,7 +19,7 @@ class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
 
     companion object {
-        const val CHANNEL_ID = "playback_channel"
+        const val CHANNEL_ID = "muzic_playback_channel"
         const val NOTIFICATION_ID = 1001
     }
 
@@ -41,59 +40,43 @@ class PlaybackService : MediaSessionService() {
 
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(pendingIntent)
-            .setId("ZingMp3Session")
             .build()
             
-        // Cấu hình Notification Provider
-        setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this)
-            .setChannelId(CHANNEL_ID)
-            .build())
+        // Cấu hình Notification Provider với Channel ID đã tạo
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId(CHANNEL_ID)
+                .build()
+        )
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Music Playback",
-                NotificationManager.IMPORTANCE_LOW
+                "Muzic Playback",
+                NotificationManager.IMPORTANCE_LOW // Quan trọng: LOW để không gây tiếng tinh tinh khi đổi bài, nhưng vẫn hiện notification
             ).apply {
-                description = "Điều khiển trình phát nhạc"
+                description = "Điều khiển trình phát nhạc Muzic"
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
                 setShowBadge(false)
             }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("PlaybackService", "onStartCommand")
-        
-        // Tạo một thông báo ban đầu để tránh lỗi "ForegroundServiceDidNotStartInTimeException"
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle("Zing mp3")
-            .setContentText("Đang phát nhạc")
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setSilent(true)
-            .build()
-            
-        try {
-            startForeground(NOTIFICATION_ID, notification)
-        } catch (e: Exception) {
-            Log.e("PlaybackService", "Error starting foreground", e)
-        }
-
         super.onStartCommand(intent, flags, startId)
         return START_STICKY
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
-        Log.d("PlaybackService", "onGetSession from ${controllerInfo.packageName}")
         return mediaSession
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        Log.d("PlaybackService", "onTaskRemoved")
         val player = mediaSession?.player
         if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
             stopSelf()
@@ -103,6 +86,7 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         Log.d("PlaybackService", "onDestroy")
         mediaSession?.run {
+            player.release()
             release()
             mediaSession = null
         }
