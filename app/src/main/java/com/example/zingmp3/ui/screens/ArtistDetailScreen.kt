@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,10 +49,6 @@ fun ArtistDetailScreen(
     var songForOptions by remember { mutableStateOf<Song?>(null) }
     var songToAddToPlaylist by remember { mutableStateOf<Song?>(null) }
     
-    val popularSongs = remember(songs) {
-        songs.sortedByDescending { it.views }.take(5)
-    }
-
     LaunchedEffect(artistId) {
         musicViewModel.fetchArtistSongs(artistId)
         musicViewModel.checkFollowStatus(artistId)
@@ -82,29 +77,7 @@ fun ArtistDetailScreen(
                 )
             }
 
-            if (popularSongs.isNotEmpty()) {
-                item {
-                    SectionTitle("Bài hát nổi bật")
-                }
-
-                itemsIndexed(popularSongs) { index, song: Song ->
-                    SongListItem(
-                        song = song,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        onClick = {
-                            musicViewModel.playPlaylist(popularSongs, index)
-                            navController.navigate("player")
-                        },
-                        onMoreClick = { songForOptions = song }
-                    )
-                }
-            }
-
             if (songs.isNotEmpty()) {
-                item {
-                    SectionTitle("Tất cả bài hát")
-                }
-
                 itemsIndexed(songs) { index, song: Song ->
                     SongListItem(
                         song = song,
@@ -232,17 +205,6 @@ fun ArtistHeader(
             }
         }
     }
-}
-
-@Composable
-fun SectionTitle(title: String) {
-    Text(
-        text = title,
-        color = Color.White,
-        fontSize = 20.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(16.dp)
-    )
 }
 
 @Composable
